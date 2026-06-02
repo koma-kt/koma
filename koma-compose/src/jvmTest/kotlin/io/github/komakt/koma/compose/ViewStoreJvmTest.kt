@@ -258,6 +258,51 @@ class ViewStoreJvmTest {
     }
 
     @Test
+    fun rememberViewStore_keyChangeUsesNewStoreStateOnFirstComposition() = runTest(testDispatcher) {
+        val firstStore = TestStore(UiState.Ready(1))
+        val secondStore = TestStore(UiState.Ready(2))
+        val renderedStates = mutableListOf<UiState>()
+        val frameClock = BroadcastFrameClock()
+        var frameTimeNanos = 0L
+        var key = "first"
+
+        suspend fun pumpFrame() {
+            testScheduler.runCurrent()
+            frameTimeNanos += 16_000_000L
+            frameClock.sendFrame(frameTimeNanos)
+            testScheduler.runCurrent()
+        }
+
+        withContext(frameClock) {
+            withRunningRecomposer { recomposer ->
+                val composition = Composition(NoOpApplier(), recomposer)
+                try {
+                    composition.setContent {
+                        renderedStates += rememberViewStore(key = key) {
+                            if (key == "first") firstStore else secondStore
+                        }.state
+                    }
+                    repeat(2) { pumpFrame() }
+
+                    renderedStates.clear()
+                    key = "second"
+                    composition.setContent {
+                        renderedStates += rememberViewStore(key = key) {
+                            if (key == "first") firstStore else secondStore
+                        }.state
+                    }
+                    repeat(2) { pumpFrame() }
+
+                    assertEquals(UiState.Ready(2), renderedStates.first())
+                } finally {
+                    composition.dispose()
+                    pumpFrame()
+                }
+            }
+        }
+    }
+
+    @Test
     fun rememberViewStore_capturedCallbackReadsLatestState() = runTest(testDispatcher) {
         val store = TestStore(UiState.Loading)
         lateinit var canHide: () -> Boolean

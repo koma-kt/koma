@@ -5,6 +5,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -141,7 +142,9 @@ fun <S : State, A : Action, E : Event> rememberViewStore(key: Any? = null, autoC
     val rememberedStore = holder.value ?: store().also { holder.value = it }
     val closeStoreOnDispose = remember(rememberedStore) { autoClose }
 
-    val state = rememberedStore.state.collectAsState()
+    val state = key(rememberedStore) {
+        rememberedStore.state.collectAsState()
+    }
 
     DisposableEffect(rememberedStore) {
         onDispose {
