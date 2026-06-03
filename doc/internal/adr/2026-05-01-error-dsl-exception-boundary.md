@@ -22,7 +22,7 @@ Koma の `recover {}` DSL（deprecated な `error {}` alias を含む）は、st
 `recover {}` DSL は、`Exception` を回復するための経路に限定する。
 
 - `recover<T>` の `T` は `Exception` のみを受け付ける
-- `ErrorScope.error` の型も `Exception` に限定する
+- `RecoverScope.error` の型も `Exception` に限定する
 - Store 内の recoverable path は `Exception` のみを `recover {}` に流す
 - `Exception` ではない `Throwable` は recoverable とみなさず、job failure として扱う
 - `Exception` ではない `Throwable` は `exceptionHandler()` に流れるが、`recover {}` には入れない

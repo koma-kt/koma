@@ -414,7 +414,7 @@ typealias ActionTransactionScope<S, A, E, S2> = ActionScope.LaunchScope.Transact
  * Use this to recover from exceptions or update state accordingly.
  */
 @KomaStoreDsl
-interface ErrorScope<S : State, E : Event, S2 : S, T : Exception> : StoreScope {
+interface RecoverScope<S : State, E : Event, S2 : S, T : Exception> : StoreScope {
     /**
      * The current state snapshot when this handler is executing.
      * This value does not change immediately when a next state is registered.

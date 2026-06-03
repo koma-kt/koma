@@ -122,7 +122,7 @@ class StoreBuilder<S : State, A : Action, E : Event> internal constructor() {
     internal val registeredExitHandlers = mutableListOf<StateHandler<(S) -> Boolean, ExitScope<S, E, S>>>()
 
     @PublishedApi
-    internal val registeredErrorHandlers = mutableListOf<StateHandler<(S, Exception) -> Boolean, ErrorScope<S, E, S, Exception>>>()
+    internal val registeredErrorHandlers = mutableListOf<StateHandler<(S, Exception) -> Boolean, RecoverScope<S, E, S, Exception>>>()
 
     private val onEnter: suspend EnterScope<S, E, S>.() -> Unit = {
         val matchingHandler = this@StoreBuilder.registeredEnterHandlers.firstOrNull { it.predicate(state) }
@@ -139,7 +139,7 @@ class StoreBuilder<S : State, A : Action, E : Event> internal constructor() {
         matchingHandler?.handler?.invoke(this)
     }
 
-    private val onError: suspend ErrorScope<S, E, S, Exception>.() -> Unit = {
+    private val onError: suspend RecoverScope<S, E, S, Exception>.() -> Unit = {
         val matchingHandler = this@StoreBuilder.registeredErrorHandlers.firstOrNull { it.predicate(state, error) }
         matchingHandler?.handler?.invoke(this) ?: throw error
     }
@@ -174,7 +174,7 @@ class StoreBuilder<S : State, A : Action, E : Event> internal constructor() {
         internal val stateExitHandlers = mutableListOf<ThreadedHandler<Nothing?, ExitScope<S, E, S2>>>()
 
         @PublishedApi
-        internal val stateErrorHandlers = mutableListOf<ThreadedHandler<(Exception) -> Boolean, ErrorScope<S, E, S2, Exception>>>()
+        internal val stateErrorHandlers = mutableListOf<ThreadedHandler<(Exception) -> Boolean, RecoverScope<S, E, S2, Exception>>>()
 
         /**
          * Registers a handler to be invoked when entering this state with the specified CoroutineDispatcher.
@@ -235,14 +235,14 @@ class StoreBuilder<S : State, A : Action, E : Event> internal constructor() {
          * @param dispatcher Optional CoroutineDispatcher override for executing the recover handler
          * @param block The handler function that processes the exception and updates the state
          */
-        inline fun <reified T : Exception> recover(dispatcher: CoroutineDispatcher? = null, noinline block: suspend ErrorScope<S, E, S2, T>.() -> Unit) {
+        inline fun <reified T : Exception> recover(dispatcher: CoroutineDispatcher? = null, noinline block: suspend RecoverScope<S, E, S2, T>.() -> Unit) {
             stateErrorHandlers.add(
                 ThreadedHandler(
                     dispatcher = dispatcher,
                     predicate = { it is T },
                     handler = {
                         @Suppress("UNCHECKED_CAST")
-                        block(this as ErrorScope<S, E, S2, T>)
+                        block(this as RecoverScope<S, E, S2, T>)
                     },
                 ),
             )
@@ -255,7 +255,7 @@ class StoreBuilder<S : State, A : Action, E : Event> internal constructor() {
             message = "Use recover<T>(dispatcher, block)",
             replaceWith = ReplaceWith("recover<T>(dispatcher, block)"),
         )
-        inline fun <reified T : Exception> error(dispatcher: CoroutineDispatcher? = null, noinline block: suspend ErrorScope<S, E, S2, T>.() -> Unit) {
+        inline fun <reified T : Exception> error(dispatcher: CoroutineDispatcher? = null, noinline block: suspend RecoverScope<S, E, S2, T>.() -> Unit) {
             recover(dispatcher, block)
         }
     }
@@ -315,7 +315,7 @@ class StoreBuilder<S : State, A : Action, E : Event> internal constructor() {
                     predicate = { state, throwable -> state is S2 && errorHandler.predicate(throwable) },
                     handler = {
                         @Suppress("UNCHECKED_CAST")
-                        errorHandler.invoke(this as ErrorScope<S, E, S2, Exception>)
+                        errorHandler.invoke(this as RecoverScope<S, E, S2, Exception>)
                     },
                 ),
             )
@@ -336,7 +336,7 @@ class StoreBuilder<S : State, A : Action, E : Event> internal constructor() {
             override val onEnter: suspend EnterScope<S, E, S>.() -> Unit = this@StoreBuilder.onEnter
             override val onAction: suspend ActionScope<S, A, E, S>.() -> Unit = this@StoreBuilder.onAction
             override val onExit: suspend ExitScope<S, E, S>.() -> Unit = this@StoreBuilder.onExit
-            override val onError: suspend ErrorScope<S, E, S, Exception>.() -> Unit = this@StoreBuilder.onError
+            override val onError: suspend RecoverScope<S, E, S, Exception>.() -> Unit = this@StoreBuilder.onError
         }
     }
 }
