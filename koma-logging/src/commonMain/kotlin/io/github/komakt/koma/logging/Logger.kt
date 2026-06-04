@@ -1,7 +1,7 @@
 package io.github.komakt.koma.logging
 
 /**
- * Logging abstraction used by Koma middleware and diagnostics.
+ * Logging abstraction used by Koma plugins and diagnostics.
  */
 fun interface Logger {
     /**

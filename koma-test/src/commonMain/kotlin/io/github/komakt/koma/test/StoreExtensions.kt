@@ -43,18 +43,17 @@ suspend fun <S : State, A : Action, E : Event> Store<S, A, E>.dispatchAndAwait(a
 }
 
 /**
- * Applies a non-state Store patch before the Store is started.
+ * Applies a Store configuration patch before the Store is started.
  *
  * This is intended for tests that need to swap persistence, policies, exception handling,
- * or plugins without rewriting the Store definition itself.
- * The patch must happen before APIs such as `start()`, `dispatch()`, `collectState()`, or
- * `collectEvent()` are used. Once the Store has consumed configuration values (e.g. `stateSaver`
- * is consumed once `currentState` is read; `coroutineContext` is consumed once a coroutine is
- * launched), patches that target those values will fail.
+ * plugins, or the declared initial state without rewriting the Store definition itself.
+ * The patch must happen before startup processing begins. Some values must also be patched before
+ * they are consumed: `initialState` and `stateSaver` before state is read, and `coroutineContext`
+ * before the Store launches any coroutine.
  *
  * This extension is available for Store instances created by the Koma DSL.
  *
- * @param builder Builder lambda for a non-state Store patch
+ * @param builder Builder lambda for a Store configuration patch
  * @throws IllegalStateException if the Store has already been started or is starting
  * @throws IllegalStateException if the patch targets a value that has already been consumed
  * @throws IllegalStateException if the Store is not backed by Koma's internal implementation

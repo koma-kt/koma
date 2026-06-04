@@ -27,7 +27,8 @@ sealed interface PluginPatch<S : State, A : Action, E : Event> {
  * Builder used to construct a [StorePatch] via a DSL.
  *
  * This is the canonical builder shared by `:koma-test`'s public `Store.patch { ... }` extension
- * and Koma's own internal tests. It only exposes non-state Store configuration.
+ * and Koma's own internal tests. It exposes Store configuration values that can be patched before
+ * the Store has consumed them.
  */
 @Suppress("unused")
 class StorePatchBuilder<S : State, A : Action, E : Event> {

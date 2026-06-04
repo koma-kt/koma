@@ -3,7 +3,7 @@ package io.github.komakt.koma.core
 /**
  * Handles non-fatal exceptions raised while a Store is running.
  *
- * This includes exceptions from DSL handlers, middleware, launched coroutines, and state
+ * This includes exceptions from DSL handlers, plugin hooks, launched coroutines, and state
  * persistence callbacks.
  */
 interface ExceptionHandler {

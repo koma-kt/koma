@@ -113,11 +113,6 @@ class ViewStore<S : State, A : Action, E : Event> internal constructor(
 /**
  * Remembers a [Store], collects its state as Compose state, and exposes it through a [ViewStore].
  *
- * Collecting [Store.state] starts the Store immediately.
- * Because [ViewStore.eventEffect] starts collecting later from a [LaunchedEffect], startup events
- * such as events emitted from an initial `enter {}` handler may be emitted before handlers in the
- * same composition begin observing them.
- *
  * The [store] lambda is used only when a new remembered Store must be created for [key].
  * For a given remembered Store instance, this function returns the same [ViewStore] instance across
  * recompositions. A new [ViewStore] is created only when a new Store instance is remembered for
