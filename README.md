@@ -1,11 +1,11 @@
 # Koma
 
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.komakt/koma-core)](https://central.sonatype.com/artifact/io.github.komakt/koma-core)
-![License](https://img.shields.io/github/license/komakt/koma)
-[![Java CI with Gradle](https://github.com/komakt/koma/actions/workflows/gradle.yml/badge.svg)](https://github.com/komakt/koma/actions/workflows/gradle.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.koma-kt/koma-core)](https://central.sonatype.com/artifact/io.github.koma-kt/koma-core)
+![License](https://img.shields.io/github/license/koma-kt/koma)
+[![Java CI with Gradle](https://github.com/koma-kt/koma/actions/workflows/gradle.yml/badge.svg)](https://github.com/koma-kt/koma/actions/workflows/gradle.yml)
 
 > [!IMPORTANT]
-> Artifacts are published under the `io.github.komakt` group.
+> Artifacts are published under the `io.github.koma-kt` group.
 
 Koma is a state management framework for Kotlin Multiplatform.
 
@@ -67,7 +67,7 @@ It keeps surrounding helper layers intentionally small, so dependencies and feat
 ## Installation
 
 ```kt
-implementation("io.github.komakt:koma-core:<latest-release>")
+implementation("io.github.koma-kt:koma-core:<latest-release>")
 ```
 
 ## Usage
@@ -299,7 +299,7 @@ fun CounterStore(
 The state diagram is as follows:
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/komakt/koma/main/doc/diagram.png" width=25% />
+  <img src="https://raw.githubusercontent.com/koma-kt/koma/main/doc/diagram.png" width=25% />
 </div>
 </br>
 
@@ -580,7 +580,7 @@ enter {
 
 ### State Persistence
 
-You can prepare a [StateSaver](koma-core/src/commonMain/kotlin/io/github/komakt/koma/core/StateSaver.kt) to automatically handle *State* persistence:
+You can prepare a [StateSaver](koma-core/src/commonMain/kotlin/koma/core/StateSaver.kt) to automatically handle *State* persistence:
 
 ```kt
 val store: Store<CounterState, CounterAction, CounterEvent> = Store {
@@ -640,7 +640,7 @@ If you want state collection not to start the Store automatically, set `autoStar
 You can use Store's `.state` (StateFlow), `.event` (Flow), and `.dispatch()` directly, but we provide a mechanism for Compose.
 
 ```kt
-implementation("io.github.komakt:koma-compose:<latest-release>")
+implementation("io.github.koma-kt:koma-compose:<latest-release>")
 ```
 
 Create an instance of the `ViewStore` from a *Store* using the `rememberViewStore()` function.
@@ -927,7 +927,7 @@ The source code is the `:koma-logging` and `:koma-message` modules in this repos
 Plugin for logging Store operations.
 
 ```kt
-implementation("io.github.komakt:koma-logging:<latest-release>")
+implementation("io.github.koma-kt:koma-logging:<latest-release>")
 ```
 
 Apply the `simpleLogging()` plugin factory function to your *Store* to log actions, events, and state changes.
@@ -957,7 +957,7 @@ If you want a different logging plugin shape entirely, implement your own Koma `
 Plugin for sending messages between *Stores*.
 
 ```kt
-implementation("io.github.komakt:koma-message:<latest-release>")
+implementation("io.github.koma-kt:koma-message:<latest-release>")
 ```
 
 First, prepare classes for messages.
@@ -1040,7 +1040,7 @@ fun CounterStore(
 Add `:koma-test` to your test source set to use Koma's test helpers.
 
 ```kt
-commonTestImplementation("io.github.komakt:koma-test:<latest-release>")
+commonTestImplementation("io.github.koma-kt:koma-test:<latest-release>")
 ```
 
 Use `dispatchAndAwait(action)` to dispatch an *Action* and suspend until the *Store* finishes processing it. It waits for startup (when needed), the matching `action {}` handler, and the resulting synchronous state transition work, but not for additional work launched with `launch {}`.

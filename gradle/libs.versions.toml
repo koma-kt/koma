@@ -7,7 +7,7 @@ kermit = "2.0.8"
 android-minSdk = "24"
 android-compileSdk = "36"
 androidTools = "32.0.0"
-compose-multiplatform = "1.8.2" # https://github.com/komakt/koma/issues/149
+compose-multiplatform = "1.8.2" # https://github.com/koma-kt/koma/issues/149
 vanniktechMavenPublish = "0.34.0"
 rin = "0.4.0"
 
@@ -29,4 +29,4 @@ kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref =
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 vanniktech-mavenPublish = { id = "com.vanniktech.maven.publish", version.ref = "vanniktechMavenPublish" }
-koma-publish = { id = "io.github.komakt.koma.publish" }
+koma-publish = { id = "koma.publish" }
