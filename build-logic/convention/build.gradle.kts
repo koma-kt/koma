@@ -4,7 +4,7 @@ plugins {
     `kotlin-dsl`
 }
 
-group = "io.github.komakt.koma.buildlogic"
+group = "koma.buildlogic"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -34,8 +34,8 @@ tasks {
 gradlePlugin {
     plugins {
         register("publish") {
-            id = "io.github.komakt.koma.publish"
-            implementationClass = "PublishConventionPlugin"
+            id = "koma.publish"
+            implementationClass = "koma.buildlogic.PublishConventionPlugin"
         }
     }
 }

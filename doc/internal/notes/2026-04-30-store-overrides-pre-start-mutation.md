@@ -114,4 +114,4 @@ val store = createMyStore().also {
 
 ## 関連
 
-- [#182](https://github.com/komakt/koma/pull/182)
+- [#182](https://github.com/koma-kt/koma/pull/182)

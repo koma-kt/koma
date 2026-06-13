@@ -9,12 +9,12 @@ plugins {
     alias(libs.plugins.koma.publish)
 }
 
-group = "io.github.komakt"
+group = "io.github.koma-kt"
 version = libs.versions.koma.get()
 
 kotlin {
     androidLibrary {
-        namespace = "io.github.komakt.koma.compose"
+        namespace = "koma.compose"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 

@@ -31,4 +31,4 @@
 - 「`dispatch()` の処理中に `dispatch()` された action を捨てる」は state ベースではなくタイミングベースのルールで、挙動が読みづらい。
 - 同じ action でも「いつ dispatch されたか」で実行可否が変わるため、`dispatchAndWait()`、middleware、follow-up action との整合も悪くなりやすい。
 - どちらも `PendingActionPolicy` の責務を広げすぎるため、現時点では採用しない。
-- 関連する動きとして、検索、再送防止、二重 submit 防止、同じ非同期処理の多重起動抑止のようなユースケース向けに、`PendingActionPolicy` ではなく `action { launch(...) }` に局所的な重なり制御を入れる [PR #181](https://github.com/komakt/koma/pull/181) を進めている。
+- 関連する動きとして、検索、再送防止、二重 submit 防止、同じ非同期処理の多重起動抑止のようなユースケース向けに、`PendingActionPolicy` ではなく `action { launch(...) }` に局所的な重なり制御を入れる [PR #181](https://github.com/koma-kt/koma/pull/181) を進めている。

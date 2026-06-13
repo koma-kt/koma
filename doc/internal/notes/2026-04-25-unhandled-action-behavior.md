@@ -211,4 +211,4 @@ fun <S : State, A : Action, E : Event> StoreOverridesBuilder<S, A, E>.unhandledA
 
 ## 関連
 
-- [#175](https://github.com/komakt/koma/issues/175)
+- [#175](https://github.com/koma-kt/koma/issues/175)

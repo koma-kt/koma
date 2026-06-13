@@ -27,4 +27,4 @@
 
 ## 関連
 
-- [#190](https://github.com/komakt/koma/issues/190)
+- [#190](https://github.com/koma-kt/koma/issues/190)

@@ -31,13 +31,13 @@
 
 開始処理中に state が変更され、かつ `PendingActionPolicy.ClearOnStateExit` の場合でも、**開始処理中の state class 遷移では本 dispatch および開始処理中の dispatch は削除しない**。
 
-実装上は、`clearPendingActionsOnStateExitIfNeeded()` が `isInitialized == true` のときだけ pending dispatch をクリアするようにしている（[StoreImpl.kt:727](../../../koma-core/src/commonMain/kotlin/io/github/komakt/koma/core/StoreImpl.kt:727)）。
+実装上は、`clearPendingActionsOnStateExitIfNeeded()` が `isInitialized == true` のときだけ pending dispatch をクリアするようにしている（[StoreImpl.kt:727](../../../koma-core/src/commonMain/kotlin/koma/core/StoreImpl.kt:727)）。
 
 #### 実装補足
 
-- 現状は collect / `Store.start()` 起点の場合でも、開始処理中の state class 遷移での dispatch 削除は行わないが、もし仮に将来、dispatch 起点のみの挙動とする場合は [StoreImpl.kt:727](../../../koma-core/src/commonMain/kotlin/io/github/komakt/koma/core/StoreImpl.kt:727) の判定を次のように変更する。
+- 現状は collect / `Store.start()` 起点の場合でも、開始処理中の state class 遷移での dispatch 削除は行わないが、もし仮に将来、dispatch 起点のみの挙動とする場合は [StoreImpl.kt:727](../../../koma-core/src/commonMain/kotlin/koma/core/StoreImpl.kt:727) の判定を次のように変更する。
   - `if (pendingActionPolicy == PendingActionPolicy.ClearOnStateExit && !(activeDispatchJob != null && !isInitialized))`
-- 仮に将来、開始処理中の state class 遷移で dispatch を落とす要件が出てきた場合、単純に `clearPendingActionsOnStateExitIfNeeded()` の `isInitialized == true` の判定を削除するだけでは足りず、[StoreImpl.kt:194](../../../koma-core/src/commonMain/kotlin/io/github/komakt/koma/core/StoreImpl.kt:194) の mutex に既に入っている dispatch の onActionDispatched() の実行を防止する必要がある。
+- 仮に将来、開始処理中の state class 遷移で dispatch を落とす要件が出てきた場合、単純に `clearPendingActionsOnStateExitIfNeeded()` の `isInitialized == true` の判定を削除するだけでは足りず、[StoreImpl.kt:194](../../../koma-core/src/commonMain/kotlin/koma/core/StoreImpl.kt:194) の mutex に既に入っている dispatch の onActionDispatched() の実行を防止する必要がある。
 
 ### 根拠: 構成フェーズには ClearOnStateExit がそもそも適用されない
 
@@ -60,7 +60,7 @@ Store の lifecycle は 2 フェーズに分けられる。
 
 ### 補足: handler matching が暗黙の安全弁になる
 
-「構成フェーズが分岐して、想定外の state class に dispatch が着地する」リスクは理屈上ありうるが、Koma の handler matching は `(state class, action class)` ペアでマッチさせており、マッチしなければ **無音で no-op**（[StoreBuilder.kt:124-127](../../../koma-core/src/commonMain/kotlin/io/github/komakt/koma/core/StoreBuilder.kt:124)）。
+「構成フェーズが分岐して、想定外の state class に dispatch が着地する」リスクは理屈上ありうるが、Koma の handler matching は `(state class, action class)` ペアでマッチさせており、マッチしなければ **無音で no-op**（[StoreBuilder.kt:124-127](../../../koma-core/src/commonMain/kotlin/koma/core/StoreBuilder.kt:124)）。
 
 そのため、たとえば `Loading → if 認証済 then Home else Login` の分岐 startup 中に `OpenPost` を dispatch しても、`Login` 側に `action<OpenPost>` が無ければそのまま破棄される。事故が起きるのは「同じ action を複数 state class で意図的に handle しており、かつ副作用が state ごとに異なる」場合に限られ、これは利用者が明示的にリスクを引き受けている setup である。
 
