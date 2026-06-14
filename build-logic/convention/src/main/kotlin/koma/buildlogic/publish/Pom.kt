@@ -7,7 +7,7 @@ import org.gradle.api.publish.maven.MavenPomLicenseSpec
 internal fun MavenPublishBaseExtension.pom() {
     pom {
         name.set("Koma")
-        description.set("A Kotlin Multiplatform Flux framework.")
+        description.set("A state management framework for Kotlin Multiplatform.")
         inceptionYear.set("2024")
         url.set("https://github.com/koma-kt/koma/")
         developers {
