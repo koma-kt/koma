@@ -23,7 +23,7 @@ jobs:
       matrix:
         include:
           - target: iosSimulatorArm64Test
-            os: macos-latest
+            os: macos-26
           - target: testAndroidHostTest
             os: ubuntu-latest
           - target: jvmTest

@@ -2,6 +2,7 @@ package koma.compose
 
 import androidx.compose.runtime.Composable
 import io.github.takahirom.rin.rememberRetained
+import koma.core.ExperimentalKomaApi
 import koma.core.State
 import koma.core.StateSaver
 
@@ -25,6 +26,7 @@ private class StateSaverImpl<S : State> : StateSaver<S> {
  *
  * @return A [StateSaver] for preserving state snapshots in Compose
  */
+@ExperimentalKomaApi
 @Suppress("unused")
 @Composable
 fun <S : State> rememberStateSaver(): StateSaver<S> {
