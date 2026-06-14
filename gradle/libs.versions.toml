@@ -1,14 +1,14 @@
 [versions]
-koma = "4.0.0-rc01"
-agp = "8.13.0"
-kotlin = "2.2.20"
-coroutines = "1.10.2"
-kermit = "2.0.8"
+koma = "4.0.0-rc02"
+agp = "9.2.1"
+kotlin = "2.3.20"
+coroutines = "1.11.0"
+kermit = "2.1.0"
 android-minSdk = "24"
 android-compileSdk = "36"
-androidTools = "32.0.0"
-compose-multiplatform = "1.8.2" # https://github.com/koma-kt/koma/issues/149
-vanniktechMavenPublish = "0.34.0"
+androidTools = "32.2.1"
+compose-multiplatform = "1.11.1"
+vanniktechMavenPublish = "0.36.0"
 rin = "0.4.0"
 
 [libraries]
