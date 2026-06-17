@@ -25,6 +25,96 @@ The architecture is inspired by [Flux](https://facebookarchive.github.io/flux/) 
 </div>
 </br>
 
+## Quick Look
+
+Describe each screen state with the `Store{}` DSL. Each `state{}` block groups the `enter{}`, `action{}`, and `recover{}` behavior that is valid for that state.
+Sealed state variants make invalid UI states unrepresentable, such as verifying a code before it is complete or editing the code while verification is in progress.
+
+```kt
+sealed class VerificationState : State {
+    abstract val code: String?
+    abstract val isVerifyEnabled: Boolean
+    abstract val isLoading: Boolean
+
+    data class Draft(
+        override val code: String? = null,
+    ) : VerificationState() {
+        override val isVerifyEnabled: Boolean = false
+        override val isLoading: Boolean = false
+    }
+
+    data class Ready(
+        override val code: String,
+    ) : VerificationState() {
+        override val isVerifyEnabled: Boolean = true
+        override val isLoading: Boolean = false
+    }
+
+    data class Verifying(
+        override val code: String,
+    ) : VerificationState() {
+        override val isVerifyEnabled: Boolean = false
+        override val isLoading: Boolean = true
+    }
+}
+
+sealed interface VerificationAction : Action {
+    data class CodeChanged(val code: String) : VerificationAction
+    data object Verify : VerificationAction
+}
+
+sealed interface VerificationEvent : Event {
+    data object Verified : VerificationEvent
+    data class ShowMessage(val message: String) : VerificationEvent
+}
+
+class VerificationViewModel(private val repository: VerificationRepository) : ViewModel() {
+
+    val store: Store<VerificationState, VerificationAction, VerificationEvent> = Store(VerificationState.Draft()) {
+
+        coroutineContext(viewModelScope.coroutineContext)
+
+        state<VerificationState.Draft> {
+            action<VerificationAction.CodeChanged> {
+                nextState { verificationStateFor(action.code) }
+            }
+        }
+
+        state<VerificationState.Ready> {
+            action<VerificationAction.CodeChanged> {
+                nextState { verificationStateFor(action.code) }
+            }
+
+            action<VerificationAction.Verify> {
+                nextState { VerificationState.Verifying(code = state.code) }
+            }
+        }
+
+        state<VerificationState.Verifying> {
+            enter {
+                repository.verify(code = state.code)
+                event(VerificationEvent.Verified)
+                nextState { VerificationState.Draft() }
+            }
+
+            recover<Exception> {
+                event(VerificationEvent.ShowMessage(error.message ?: "Verification failed."))
+                nextState { VerificationState.Ready(code = state.code) }
+            }
+        }
+    }
+
+    private fun verificationStateFor(input: String): VerificationState {
+        val code = input.trim()
+        return if (code.length == 6) {
+            VerificationState.Ready(code = code)
+        } else {
+            VerificationState.Draft(code = code.ifEmpty { null })
+        }
+    }
+}
+```
+
 ## When Koma Fits Best
 
 Koma works especially well when a feature has multiple explicit UI or business states and the transition rules between them are important.
@@ -37,6 +127,7 @@ It keeps surrounding helper layers intentionally small, so dependencies and feat
 
 ## Table of Contents
 
+- [Quick Look](#quick-look)
 - [When Koma Fits Best](#when-koma-fits-best)
 - [Current Scope](#current-scope)
 - [Installation](#installation)
