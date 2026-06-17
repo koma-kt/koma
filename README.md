@@ -23,7 +23,6 @@ The architecture is inspired by [Flux](https://facebookarchive.github.io/flux/) 
 <div align="center">
   <img src="doc/architecture.png" width=60% />
 </div>
-</br>
 
 ## Quick Look
 
