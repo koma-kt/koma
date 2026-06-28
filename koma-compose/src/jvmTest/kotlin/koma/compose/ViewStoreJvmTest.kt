@@ -210,6 +210,38 @@ class ViewStoreJvmTest {
     }
 
     @Test
+    fun rememberViewStore_invokesStoreLambdaOnlyOnceForSameKey() = runTest(testDispatcher) {
+        val store = TestStore(UiState.Ready(1))
+        val recompositionTrigger = mutableStateOf(0)
+        var storeCalls = 0
+        var latestTriggerValue = -1
+        lateinit var initialViewStore: ViewStore<UiState, UiAction, UiEvent>
+        lateinit var latestViewStore: ViewStore<UiState, UiAction, UiEvent>
+
+        withComposition(
+            content = {
+                latestTriggerValue = recompositionTrigger.value
+                latestViewStore = rememberViewStore(key = "same") {
+                    storeCalls++
+                    store
+                }
+            },
+            afterSetContent = {
+                initialViewStore = latestViewStore
+                assertEquals(1, storeCalls)
+                assertEquals(0, latestTriggerValue)
+
+                recompositionTrigger.value = 1
+                Snapshot.sendApplyNotifications()
+            },
+        )
+
+        assertEquals(1, latestTriggerValue)
+        assertEquals(1, storeCalls)
+        assertSame(initialViewStore, latestViewStore)
+    }
+
+    @Test
     fun rememberViewStore_recreatesWhenKeyChangesEvenIfStateIsEqual() = runTest(testDispatcher) {
         val firstStore = TestStore(UiState.Loading)
         val secondStore = TestStore(UiState.Loading)
@@ -361,12 +393,14 @@ class ViewStoreJvmTest {
     }
 
     @Test
-    fun childThatReadsViewStoreState_updatesRenderedNodeOnStateUpdate() = runTest(testDispatcher) {
+    fun childThatReadsViewStoreState_doesNotRecomposeWhenStateIsEqual() = runTest(testDispatcher) {
         val store = TestStore(UiState.Ready(1))
         val root = TestNode()
+        var childCompositions = 0
 
         @Composable
         fun Child(viewStore: ViewStore<UiState, UiAction, UiEvent>) {
+            childCompositions++
             StateNode(viewStore.state)
         }
 
@@ -378,12 +412,46 @@ class ViewStoreJvmTest {
             },
             afterSetContent = { pumpFrame ->
                 assertEquals(UiState.Ready(1), root.singleChild.state)
+                assertEquals(1, childCompositions)
+
+                store.state.value = UiState.Ready(1)
+                testScheduler.runCurrent()
+                pumpFrame()
+
+                assertEquals(UiState.Ready(1), root.singleChild.state)
+                assertEquals(1, childCompositions)
+            },
+        )
+    }
+
+    @Test
+    fun childThatReadsViewStoreState_updatesRenderedNodeOnStateUpdate() = runTest(testDispatcher) {
+        val store = TestStore(UiState.Ready(1))
+        val root = TestNode()
+        var childCompositions = 0
+
+        @Composable
+        fun Child(viewStore: ViewStore<UiState, UiAction, UiEvent>) {
+            childCompositions++
+            StateNode(viewStore.state)
+        }
+
+        withNodeComposition(
+            root = root,
+            content = {
+                val viewStore = rememberViewStore { store }
+                Child(viewStore)
+            },
+            afterSetContent = { pumpFrame ->
+                assertEquals(UiState.Ready(1), root.singleChild.state)
+                assertEquals(1, childCompositions)
 
                 store.state.value = UiState.Ready(2)
                 testScheduler.runCurrent()
                 pumpFrame()
 
                 assertEquals(UiState.Ready(2), root.singleChild.state)
+                assertEquals(2, childCompositions)
             },
         )
     }
