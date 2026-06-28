@@ -4,8 +4,10 @@ import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
+import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withRunningRecomposer
 import koma.core.Action
 import koma.core.Event
@@ -208,6 +210,38 @@ class ViewStoreJvmTest {
     }
 
     @Test
+    fun rememberViewStore_invokesStoreLambdaOnlyOnceForSameKey() = runTest(testDispatcher) {
+        val store = TestStore(UiState.Ready(1))
+        val recompositionTrigger = mutableStateOf(0)
+        var storeCalls = 0
+        var latestTriggerValue = -1
+        lateinit var initialViewStore: ViewStore<UiState, UiAction, UiEvent>
+        lateinit var latestViewStore: ViewStore<UiState, UiAction, UiEvent>
+
+        withComposition(
+            content = {
+                latestTriggerValue = recompositionTrigger.value
+                latestViewStore = rememberViewStore(key = "same") {
+                    storeCalls++
+                    store
+                }
+            },
+            afterSetContent = {
+                initialViewStore = latestViewStore
+                assertEquals(1, storeCalls)
+                assertEquals(0, latestTriggerValue)
+
+                recompositionTrigger.value = 1
+                Snapshot.sendApplyNotifications()
+            },
+        )
+
+        assertEquals(1, latestTriggerValue)
+        assertEquals(1, storeCalls)
+        assertSame(initialViewStore, latestViewStore)
+    }
+
+    @Test
     fun rememberViewStore_recreatesWhenKeyChangesEvenIfStateIsEqual() = runTest(testDispatcher) {
         val firstStore = TestStore(UiState.Loading)
         val secondStore = TestStore(UiState.Loading)
@@ -326,56 +360,100 @@ class ViewStoreJvmTest {
     }
 
     @Test
-    fun childThatDoesNotReadState_isSkippedOnStateUpdate() = runTest(testDispatcher) {
+    fun childThatDoesNotReadViewStoreState_doesNotUpdateRenderedNodeOnStateUpdate() = runTest(testDispatcher) {
         val store = TestStore(UiState.Ready(1))
+        val root = TestNode()
         var childCompositions = 0
 
+        @Suppress("UNUSED_PARAMETER")
         @Composable
         fun Child(viewStore: ViewStore<UiState, UiAction, UiEvent>) {
             childCompositions++
+            StateNode(UiState.Ready(100))
         }
 
-        withComposition(
+        withNodeComposition(
+            root = root,
             content = {
                 val viewStore = rememberViewStore { store }
                 Child(viewStore)
             },
-            afterSetContent = {
+            afterSetContent = { pumpFrame ->
+                assertEquals(UiState.Ready(100), root.singleChild.state)
                 assertEquals(1, childCompositions)
 
                 store.state.value = UiState.Ready(2)
                 testScheduler.runCurrent()
+                pumpFrame()
+
+                assertEquals(UiState.Ready(100), root.singleChild.state)
+                assertEquals(1, childCompositions)
             },
         )
-
-        assertEquals(1, childCompositions)
     }
 
     @Test
-    fun childThatReadsViewStoreState_isStillSkippedOnStateUpdate() = runTest(testDispatcher) {
+    fun childThatReadsViewStoreState_doesNotRecomposeWhenStateIsEqual() = runTest(testDispatcher) {
         val store = TestStore(UiState.Ready(1))
+        val root = TestNode()
         var childCompositions = 0
 
         @Composable
         fun Child(viewStore: ViewStore<UiState, UiAction, UiEvent>) {
-            viewStore.state
             childCompositions++
+            StateNode(viewStore.state)
         }
 
-        withComposition(
+        withNodeComposition(
+            root = root,
             content = {
                 val viewStore = rememberViewStore { store }
                 Child(viewStore)
             },
-            afterSetContent = {
+            afterSetContent = { pumpFrame ->
+                assertEquals(UiState.Ready(1), root.singleChild.state)
+                assertEquals(1, childCompositions)
+
+                store.state.value = UiState.Ready(1)
+                testScheduler.runCurrent()
+                pumpFrame()
+
+                assertEquals(UiState.Ready(1), root.singleChild.state)
+                assertEquals(1, childCompositions)
+            },
+        )
+    }
+
+    @Test
+    fun childThatReadsViewStoreState_updatesRenderedNodeOnStateUpdate() = runTest(testDispatcher) {
+        val store = TestStore(UiState.Ready(1))
+        val root = TestNode()
+        var childCompositions = 0
+
+        @Composable
+        fun Child(viewStore: ViewStore<UiState, UiAction, UiEvent>) {
+            childCompositions++
+            StateNode(viewStore.state)
+        }
+
+        withNodeComposition(
+            root = root,
+            content = {
+                val viewStore = rememberViewStore { store }
+                Child(viewStore)
+            },
+            afterSetContent = { pumpFrame ->
+                assertEquals(UiState.Ready(1), root.singleChild.state)
                 assertEquals(1, childCompositions)
 
                 store.state.value = UiState.Ready(2)
                 testScheduler.runCurrent()
+                pumpFrame()
+
+                assertEquals(UiState.Ready(2), root.singleChild.state)
+                assertEquals(2, childCompositions)
             },
         )
-
-        assertEquals(1, childCompositions)
     }
 
     @Test
@@ -575,6 +653,39 @@ class ViewStoreJvmTest {
             }
         }
     }
+
+    private suspend fun TestScope.withNodeComposition(
+        root: TestNode,
+        content: @Composable () -> Unit,
+        afterSetContent: suspend (pumpFrame: suspend () -> Unit) -> Unit = {},
+    ) {
+        val frameClock = BroadcastFrameClock()
+        var frameTimeNanos = 0L
+
+        suspend fun pumpFrame() {
+            testScheduler.runCurrent()
+            Snapshot.sendApplyNotifications()
+            frameTimeNanos += 16_000_000L
+            frameClock.sendFrame(frameTimeNanos)
+            testScheduler.runCurrent()
+        }
+
+        withContext(frameClock) {
+            withRunningRecomposer { recomposer ->
+                val composition = Composition(TestApplier(root), recomposer)
+                try {
+                    composition.setContent(content)
+                    repeat(2) { pumpFrame() }
+
+                    afterSetContent(::pumpFrame)
+                    repeat(2) { pumpFrame() }
+                } finally {
+                    composition.dispose()
+                    pumpFrame()
+                }
+            }
+        }
+    }
 }
 
 private sealed interface UiState : State {
@@ -616,6 +727,53 @@ private class TestStore(
 
     override fun close() {
         closeCount++
+    }
+}
+
+@Composable
+private fun StateNode(state: UiState) {
+    ComposeNode<TestNode, TestApplier>(
+        factory = { TestNode() },
+        update = {
+            set(state) {
+                this.state = it
+            }
+        },
+    )
+}
+
+private class TestNode {
+    val children = mutableListOf<TestNode>()
+    var state: UiState? = null
+
+    val singleChild: TestNode
+        get() = children.single()
+}
+
+private class TestApplier(root: TestNode) : AbstractApplier<TestNode>(root) {
+    override fun insertTopDown(index: Int, instance: TestNode) = Unit
+
+    override fun insertBottomUp(index: Int, instance: TestNode) {
+        current.children.add(index, instance)
+    }
+
+    override fun move(from: Int, to: Int, count: Int) {
+        val children = current.children
+        val moved = children.subList(from, from + count).toList()
+        repeat(count) {
+            children.removeAt(from)
+        }
+        children.addAll(if (to > from) to - count else to, moved)
+    }
+
+    override fun remove(index: Int, count: Int) {
+        repeat(count) {
+            current.children.removeAt(index)
+        }
+    }
+
+    override fun onClear() {
+        root.children.clear()
     }
 }
 
