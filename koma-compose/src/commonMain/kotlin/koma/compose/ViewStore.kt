@@ -35,7 +35,6 @@ import androidx.compose.runtime.State as ComposeState
  * @param dispatch Function to dispatch actions
  * @param eventFlow Flow used to receive one-off events
  */
-@Suppress("unused")
 @Stable
 class ViewStore<S : State, A : Action, E : Event> internal constructor(
     private val stateRef: ComposeState<S>,
@@ -113,6 +112,42 @@ class ViewStore<S : State, A : Action, E : Event> internal constructor(
 /**
  * Remembers a [Store], collects its state as Compose state, and exposes it through a [ViewStore].
  *
+ * Use this overload when a Store is already provided by a ViewModel or dependency injection.
+ * For a given Store instance, this function returns the same [ViewStore] instance across
+ * recompositions. A new [ViewStore] is created only when [store] changes.
+ *
+ * @param store Source Store instance
+ * @param autoClose Whether to close the Store when the composable leaves the composition
+ * @return A ViewStore state holder backed by the Store
+ */
+@Composable
+fun <S : State, A : Action, E : Event> rememberViewStore(store: Store<S, A, E>, autoClose: Boolean = false): ViewStore<S, A, E> {
+    val closeStoreOnDispose = remember(store) { autoClose }
+
+    val state = key(store) {
+        store.state.collectAsState()
+    }
+
+    DisposableEffect(store) {
+        onDispose {
+            if (closeStoreOnDispose) {
+                store.close()
+            }
+        }
+    }
+
+    return remember(store) {
+        ViewStore(
+            stateRef = state,
+            dispatch = store::dispatch,
+            eventFlow = store.event,
+        )
+    }
+}
+
+/**
+ * Remembers a [Store], collects its state as Compose state, and exposes it through a [ViewStore].
+ *
  * The [store] lambda is used only when a new remembered Store must be created for [key].
  * For a given remembered Store instance, this function returns the same [ViewStore] instance across
  * recompositions. A new [ViewStore] is created only when a new Store instance is remembered for
@@ -123,18 +158,12 @@ class ViewStore<S : State, A : Action, E : Event> internal constructor(
  *
  * @param key Key used to remember and retain the Store instance
  * @param autoClose Whether to close the Store when the composable leaves the composition
- * @param store Composable function to create the source Store instance
+ * @param store Function to create the source Store instance
  * @return A ViewStore state holder backed by the remembered Store
  */
-@Suppress("unused")
 @Composable
-fun <S : State, A : Action, E : Event> rememberViewStore(key: Any? = null, autoClose: Boolean = false, store: @Composable () -> Store<S, A, E>): ViewStore<S, A, E> {
-    val holder = remember(key) {
-        object {
-            var value: Store<S, A, E>? = null
-        }
-    }
-    val rememberedStore = holder.value ?: store().also { holder.value = it }
+fun <S : State, A : Action, E : Event> rememberViewStore(key: Any? = null, autoClose: Boolean = false, store: () -> Store<S, A, E>): ViewStore<S, A, E> {
+    val rememberedStore = remember(key) { store() }
     val closeStoreOnDispose = remember(rememberedStore) { autoClose }
 
     val state = key(rememberedStore) {

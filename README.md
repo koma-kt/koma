@@ -764,9 +764,7 @@ class CounterViewModel @Inject constructor(
 @Composable
 fun CounterScreen(
     // create an instance of ViewStore
-    viewStore: ViewStore<CounterState, CounterAction, CounterEvent> = rememberViewStore {
-        hiltViewModel<CounterViewModel>().store
-    },
+    viewStore: ViewStore<CounterState, CounterAction, CounterEvent> = rememberViewStore(hiltViewModel<CounterViewModel>().store),
 ) {
     // ...
 
@@ -810,14 +808,22 @@ fun CounterStore(
 
 ```kt
 @Composable
-fun CounterScreen(
-    viewStore: ViewStore<CounterState, CounterAction, CounterEvent> = rememberViewStore {
+fun CounterScreen() { // wrapper for the preview-friendly CounterScreen below
+    val coroutineScope = rememberCoroutineScope()
+    val stateSaver = rememberStateSaver()
+    val viewStore: ViewStore<CounterState, CounterAction, CounterEvent> = rememberViewStore {
         CounterStore(
-            coroutineContext = rememberCoroutineScope().coroutineContext, // or, specify the autoClose option in rememberViewStore {}
-            stateSaver = rememberStateSaver(), // state persistence during screen rotation, etc.
+            coroutineContext = coroutineScope.coroutineContext, // or, specify the autoClose option in rememberViewStore{}
+            stateSaver = stateSaver, // state persistence during screen rotation, etc.
             counterRepository = CounterRepositoryImpl(),
         )
-    },
+    }
+    CounterScreen(viewStore = viewStore)
+}
+
+@Composable
+fun CounterScreen(
+    viewStore: ViewStore<CounterState, CounterAction, CounterEvent>,
 ) {
     // ...
 }
