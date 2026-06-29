@@ -190,6 +190,24 @@ class ViewStoreJvmTest {
     }
 
     @Test
+    fun rememberViewStore_withStoreInstanceProvidesCurrentStateAndDispatchesAction() = runTest(testDispatcher) {
+        val store = TestStore(UiState.Ready(1))
+        lateinit var viewStore: ViewStore<UiState, UiAction, UiEvent>
+
+        withComposition(
+            content = {
+                viewStore = rememberViewStore(store)
+            },
+            afterSetContent = {
+                assertEquals(UiState.Ready(1), viewStore.state)
+
+                viewStore.dispatch(UiAction.Increment)
+                assertEquals(listOf<UiAction>(UiAction.Increment), store.dispatchedActions)
+            },
+        )
+    }
+
+    @Test
     fun rememberViewStore_keepsSameInstanceWhileStateUpdates() = runTest(testDispatcher) {
         val store = TestStore(UiState.Ready(1))
         lateinit var viewStore: ViewStore<UiState, UiAction, UiEvent>
