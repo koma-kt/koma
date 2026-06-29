@@ -1,5 +1,5 @@
 [versions]
-koma = "4.0.0-rc02"
+koma = "4.0.0-rc03"
 agp = "9.2.1"
 kotlin = "2.3.20"
 coroutines = "1.11.0"
