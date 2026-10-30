@@ -3,8 +3,8 @@ package koma.compose
 import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Composition
 import androidx.compose.runtime.ComposeNode
+import androidx.compose.runtime.Composition
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.Snapshot
@@ -62,7 +62,8 @@ class ViewStoreJvmTest {
         withComposition(
             content = {
                 ViewStore<UiState, UiAction, UiEvent>(
-                    state = UiState.Ready(0),
+                    stateRef = mutableStateOf(UiState.Ready(0)),
+                    dispatch = {},
                     eventFlow = events,
                 ).eventEffect<UiEvent.ValueChanged> { event ->
                     handled += event
@@ -86,7 +87,7 @@ class ViewStoreJvmTest {
         val frameClock = BroadcastFrameClock()
         var frameTimeNanos = 0L
 
-        suspend fun pumpFrame() {
+        fun pumpFrame() {
             testScheduler.runCurrent()
             frameTimeNanos += 16_000_000L
             frameClock.sendFrame(frameTimeNanos)
@@ -99,7 +100,8 @@ class ViewStoreJvmTest {
                 try {
                     composition.setContent {
                         ViewStore<UiState, UiAction, UiEvent>(
-                            state = viewState,
+                            stateRef = mutableStateOf(viewState),
+                            dispatch = {},
                             eventFlow = events,
                         ).eventEffect<UiEvent.ValueChanged> { event ->
                             handled += "${(state as UiState.Ready).value}:$label:${event.value}"
@@ -111,7 +113,8 @@ class ViewStoreJvmTest {
                     viewState = UiState.Ready(2)
                     composition.setContent {
                         ViewStore<UiState, UiAction, UiEvent>(
-                            state = viewState,
+                            stateRef = mutableStateOf(viewState),
+                            dispatch = {},
                             eventFlow = events,
                         ).eventEffect<UiEvent.ValueChanged> { event ->
                             handled += "${(state as UiState.Ready).value}:$label:${event.value}"
@@ -157,7 +160,8 @@ class ViewStoreJvmTest {
         withComposition(
             content = {
                 ViewStore<UiState, UiAction, UiEvent>(
-                    state = UiState.Ready(0),
+                    stateRef = mutableStateOf(UiState.Ready(0)),
+                    dispatch = {},
                     eventFlow = events,
                 ).handle<UiEvent.ValueChanged> { event ->
                     handled += event
@@ -268,7 +272,7 @@ class ViewStoreJvmTest {
         var key = "first"
         lateinit var latestViewStore: ViewStore<UiState, UiAction, UiEvent>
 
-        suspend fun pumpFrame() {
+        fun pumpFrame() {
             testScheduler.runCurrent()
             frameTimeNanos += 16_000_000L
             frameClock.sendFrame(frameTimeNanos)
@@ -318,7 +322,7 @@ class ViewStoreJvmTest {
         var frameTimeNanos = 0L
         var key = "first"
 
-        suspend fun pumpFrame() {
+        fun pumpFrame() {
             testScheduler.runCurrent()
             frameTimeNanos += 16_000_000L
             frameClock.sendFrame(frameTimeNanos)
@@ -477,7 +481,7 @@ class ViewStoreJvmTest {
     @Test
     fun rememberViewStore_closeBehaviorIsFixedPerRememberedStore() = runTest(testDispatcher) {
         val neverCloseStore = TestStore(UiState.Ready(0))
-        var autoClose = mutableStateOf(false)
+        val autoClose = mutableStateOf(false)
 
         withComposition(
             content = {
@@ -513,7 +517,7 @@ class ViewStoreJvmTest {
         var key = "first"
         var autoClose = false
 
-        suspend fun pumpFrame() {
+        fun pumpFrame() {
             testScheduler.runCurrent()
             frameTimeNanos += 16_000_000L
             frameClock.sendFrame(frameTimeNanos)
@@ -559,12 +563,12 @@ class ViewStoreJvmTest {
             coroutineContext(coroutineContext)
             state<UiState.Loading> {
                 enter {
-                    nextState(UiState.Ready(0))
+                    nextState { UiState.Ready(0) }
                 }
             }
             state<UiState.Ready> {
                 action<UiAction.Increment> {
-                    nextState(state.copy(value = state.value + 1))
+                    nextState { state.copy(value = state.value + 1) }
                 }
             }
         }
@@ -590,7 +594,7 @@ class ViewStoreJvmTest {
             coroutineContext(coroutineContext)
             state<UiState.Ready> {
                 action<UiAction.Increment> {
-                    nextState(state.copy(value = state.value + 1))
+                    nextState { state.copy(value = state.value + 1) }
                 }
             }
         }
@@ -620,7 +624,7 @@ class ViewStoreJvmTest {
             state<UiState.Loading> {
                 enter(dispatcher = testDispatcher) {
                     enterGate.await()
-                    nextState(UiState.Ready(0))
+                    nextState { UiState.Ready(0) }
                 }
             }
         }
@@ -648,7 +652,7 @@ class ViewStoreJvmTest {
         val frameClock = BroadcastFrameClock()
         var frameTimeNanos = 0L
 
-        suspend fun pumpFrame() {
+        fun pumpFrame() {
             testScheduler.runCurrent()
             frameTimeNanos += 16_000_000L
             frameClock.sendFrame(frameTimeNanos)

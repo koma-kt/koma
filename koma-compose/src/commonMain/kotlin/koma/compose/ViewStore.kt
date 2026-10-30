@@ -15,7 +15,7 @@ import koma.core.State
 import koma.core.Store
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
 import androidx.compose.runtime.State as ComposeState
 
 /**
@@ -38,17 +38,15 @@ import androidx.compose.runtime.State as ComposeState
 @Stable
 class ViewStore<S : State, A : Action, E : Event> internal constructor(
     private val stateRef: ComposeState<S>,
-    val dispatch: (action: A) -> Unit = {},
-    @PublishedApi internal val eventFlow: Flow<E> = emptyFlow(),
+    val dispatch: (action: A) -> Unit,
+    @PublishedApi internal val eventFlow: Flow<E>,
 ) {
     constructor(
         state: S,
-        dispatch: (A) -> Unit = {},
-        eventFlow: Flow<E> = emptyFlow(),
     ) : this(
         stateRef = mutableStateOf(state),
-        dispatch = dispatch,
-        eventFlow = eventFlow,
+        dispatch = {},
+        eventFlow = emptyFlow(),
     )
 
     val state: S
@@ -93,8 +91,8 @@ class ViewStore<S : State, A : Action, E : Event> internal constructor(
         val currentViewStore = rememberUpdatedState(this)
         val currentBlock = rememberUpdatedState(block)
         LaunchedEffect(eventFlow) {
-            eventFlow.filter { it is E2 }.collect {
-                currentBlock.value(currentViewStore.value, it as E2)
+            eventFlow.filterIsInstance<E2>().collect {
+                currentBlock.value(currentViewStore.value, it)
             }
         }
     }
@@ -104,7 +102,7 @@ class ViewStore<S : State, A : Action, E : Event> internal constructor(
         replaceWith = ReplaceWith("eventEffect<E2>(block)"),
         level = DeprecationLevel.WARNING,
     )
-    @Suppress("ComposableNaming")
+    @Suppress("ComposableNaming", "unused")
     @Composable
     inline fun <reified E2 : E> handle(noinline block: ViewStore<S, A, E>.(event: E2) -> Unit) = eventEffect<E2>(block)
 }
