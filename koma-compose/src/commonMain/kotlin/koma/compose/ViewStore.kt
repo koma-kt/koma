@@ -9,6 +9,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.retain.RetainObserver
+import androidx.compose.runtime.retain.retain
 import koma.core.Action
 import koma.core.Event
 import koma.core.State
@@ -113,13 +115,108 @@ class ViewStore<S : State, A : Action, E : Event> internal constructor(
  * Use this overload when a Store is already provided by a ViewModel or dependency injection.
  * For a given Store instance, this function returns the same [ViewStore] instance across
  * recompositions. A new [ViewStore] is created only when [store] changes.
+ * The Store is not closed by this function; its owner is responsible for closing it.
+ *
+ * @param store Source Store instance
+ * @return A ViewStore state holder backed by the Store
+ */
+@Composable
+fun <S : State, A : Action, E : Event> rememberViewStore(store: Store<S, A, E>): ViewStore<S, A, E> {
+    return rememberViewStoreInternal(store, autoClose = false)
+}
+
+/**
+ * Remembers a [ViewStore] with optional Store cleanup on composition disposal.
+ *
+ * This overload will be removed in a future release. Use `rememberViewStore(store)` instead.
+ * When migrating from `autoClose = true`, move Store cleanup to its owner before removing the
+ * argument. The existing cleanup behavior is preserved until this overload is removed.
  *
  * @param store Source Store instance
  * @param autoClose Whether to close the Store when the composable leaves the composition
  * @return A ViewStore state holder backed by the Store
  */
+@Deprecated(
+    message = "The autoClose overload will be removed in a future release. Use rememberViewStore(store). If autoClose is true, move Store cleanup to its owner before removing the argument.",
+    level = DeprecationLevel.WARNING,
+)
 @Composable
 fun <S : State, A : Action, E : Event> rememberViewStore(store: Store<S, A, E>, autoClose: Boolean = false): ViewStore<S, A, E> {
+    return rememberViewStoreInternal(store, autoClose)
+}
+
+/**
+ * Remembers a [Store], collects its state as Compose state, and exposes it through a [ViewStore].
+ *
+ * The [store] lambda is used only when a new remembered Store must be created for [key].
+ * For a given remembered Store instance, this function returns the same [ViewStore] instance across
+ * recompositions. A new [ViewStore] is created only when a new Store instance is remembered for
+ * [key].
+ * The [autoClose] value is fixed when that remembered Store instance is adopted. Recomposition
+ * alone does not change close ownership for the same Store, but when [key] causes a different
+ * Store instance to be remembered, the current [autoClose] value is used for that new Store.
+ *
+ * Prefer [retainViewStore] for creating a Store owned by the UI. It retains the Store across
+ * transient composition recreation and always closes it when retention ends.
+ *
+ * @param key Key used to remember and retain the Store instance
+ * @param autoClose Whether to close the Store when the composable leaves the composition
+ * @param store Function to create the source Store instance
+ * @return A ViewStore state holder backed by the remembered Store
+ */
+@Deprecated(
+    message = "Use retainViewStore instead. The Store is retained across transient composition recreation and is always closed when retention ends.",
+    replaceWith = ReplaceWith("retainViewStore(key, store = store)"),
+    level = DeprecationLevel.WARNING,
+)
+@Composable
+fun <S : State, A : Action, E : Event> rememberViewStore(key: Any? = null, autoClose: Boolean = false, store: () -> Store<S, A, E>): ViewStore<S, A, E> {
+    val rememberedStore = remember(key) { store() }
+    return rememberViewStoreInternal(rememberedStore, autoClose)
+}
+
+/**
+ * Retains a [Store] across transient composition recreation and exposes its state as a [ViewStore].
+ *
+ * The [store] factory runs only when no retained Store is available for [keys]. Retention follows
+ * `LocalRetainedValuesStore`; without a retaining owner, this behaves like [rememberViewStore].
+ * The ViewStore and its state collection are recreated when the composition is recreated.
+ * This keeps the Store in memory only; it does not survive process death.
+ *
+ * This function owns the Store and always closes it when retention ends (or creation is
+ * abandoned), rather than on transient composition disposal. For an externally owned Store,
+ * use the [rememberViewStore] overload that accepts a Store instance.
+ *
+ * @param keys Keys identifying the retained Store; changing any key creates a new Store.
+ * Keys must not reference short-lived UI objects.
+ * @param store Factory for a new Store; must not capture short-lived UI objects in the Store
+ */
+@Composable
+fun <S : State, A : Action, E : Event> retainViewStore(vararg keys: Any?, store: () -> Store<S, A, E>): ViewStore<S, A, E> {
+    val retainedStore = retain(*keys) { RetainedStore(store()) }
+    return rememberViewStoreInternal(retainedStore.store, autoClose = false)
+}
+
+private class RetainedStore<S : State, A : Action, E : Event>(
+    val store: Store<S, A, E>,
+) : RetainObserver {
+    override fun onRetained() = Unit
+
+    override fun onEnteredComposition() = Unit
+
+    override fun onExitedComposition() = Unit
+
+    override fun onRetired() {
+        store.close()
+    }
+
+    override fun onUnused() {
+        store.close()
+    }
+}
+
+@Composable
+private fun <S : State, A : Action, E : Event> rememberViewStoreInternal(store: Store<S, A, E>, autoClose: Boolean): ViewStore<S, A, E> {
     val closeStoreOnDispose = remember(store) { autoClose }
 
     val state = key(store) {
@@ -139,48 +236,6 @@ fun <S : State, A : Action, E : Event> rememberViewStore(store: Store<S, A, E>, 
             stateRef = state,
             dispatch = store::dispatch,
             eventFlow = store.event,
-        )
-    }
-}
-
-/**
- * Remembers a [Store], collects its state as Compose state, and exposes it through a [ViewStore].
- *
- * The [store] lambda is used only when a new remembered Store must be created for [key].
- * For a given remembered Store instance, this function returns the same [ViewStore] instance across
- * recompositions. A new [ViewStore] is created only when a new Store instance is remembered for
- * [key].
- * The [autoClose] value is fixed when that remembered Store instance is adopted. Recomposition
- * alone does not change close ownership for the same Store, but when [key] causes a different
- * Store instance to be remembered, the current [autoClose] value is used for that new Store.
- *
- * @param key Key used to remember and retain the Store instance
- * @param autoClose Whether to close the Store when the composable leaves the composition
- * @param store Function to create the source Store instance
- * @return A ViewStore state holder backed by the remembered Store
- */
-@Composable
-fun <S : State, A : Action, E : Event> rememberViewStore(key: Any? = null, autoClose: Boolean = false, store: () -> Store<S, A, E>): ViewStore<S, A, E> {
-    val rememberedStore = remember(key) { store() }
-    val closeStoreOnDispose = remember(rememberedStore) { autoClose }
-
-    val state = key(rememberedStore) {
-        rememberedStore.state.collectAsState()
-    }
-
-    DisposableEffect(rememberedStore) {
-        onDispose {
-            if (closeStoreOnDispose) {
-                rememberedStore.close()
-            }
-        }
-    }
-
-    return remember(rememberedStore) {
-        ViewStore(
-            stateRef = state,
-            dispatch = rememberedStore::dispatch,
-            eventFlow = rememberedStore.event,
         )
     }
 }

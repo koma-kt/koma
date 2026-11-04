@@ -7,6 +7,8 @@ import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.retain.LocalRetainedValuesStoreProvider
+import androidx.compose.runtime.retain.ManagedRetainedValuesStore
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withRunningRecomposer
 import koma.core.Action
@@ -643,6 +645,101 @@ class ViewStoreJvmTest {
                 assertEquals(UiState.Ready(0), store.currentState)
             },
         )
+    }
+
+    @Test
+    fun retainViewStore_reusesStoreAcrossCompositionsAndClosesOnlyWhenRetired() = runTest(testDispatcher) {
+        val retainedValues = ManagedRetainedValuesStore()
+        val store = TestStore(UiState.Ready(1))
+        var creations = 0
+        lateinit var viewStore: ViewStore<UiState, UiAction, UiEvent>
+        val content: @Composable () -> Unit = {
+            LocalRetainedValuesStoreProvider(retainedValues) {
+                viewStore = retainViewStore {
+                    creations++
+                    store
+                }
+            }
+        }
+        try {
+            withComposition(content) {
+                assertEquals(UiState.Ready(1), viewStore.state)
+                viewStore.dispatch(UiAction.Increment)
+                assertEquals(listOf<UiAction>(UiAction.Increment), store.dispatchedActions)
+            }
+            assertEquals(0, store.closeCount)
+            val firstViewStore = viewStore
+            store.state.value = UiState.Ready(2)
+
+            withComposition(content) {
+                assertEquals(1, creations)
+                assertNotSame(firstViewStore, viewStore)
+                assertEquals(UiState.Ready(2), viewStore.state)
+                store.state.value = UiState.Ready(3)
+            }
+            assertEquals(UiState.Ready(3), viewStore.state)
+            assertEquals(0, store.closeCount)
+        } finally {
+            retainedValues.dispose()
+        }
+        assertEquals(1, store.closeCount)
+    }
+
+    @Test
+    fun retainViewStore_recreatesStoreWhenEitherKeyChanges() = runTest(testDispatcher) {
+        val firstKey = mutableStateOf("account-1")
+        val secondKey = mutableStateOf(1)
+        val stores = mutableListOf<TestStore>()
+        lateinit var viewStore: ViewStore<UiState, UiAction, UiEvent>
+        withNodeComposition(
+            root = TestNode(),
+            content = {
+                viewStore = retainViewStore(firstKey.value, secondKey.value) {
+                    TestStore(UiState.Ready(secondKey.value)).also { stores += it }
+                }
+            },
+            afterSetContent = { pumpFrame ->
+                assertEquals(1, stores.size)
+                val initialViewStore = viewStore
+                secondKey.value = 2
+                pumpFrame()
+                assertEquals(2, stores.size)
+                assertEquals(1, stores[0].closeCount)
+                assertNotSame(initialViewStore, viewStore)
+                assertEquals(UiState.Ready(2), viewStore.state)
+
+                firstKey.value = "account-2"
+                pumpFrame()
+                assertEquals(3, stores.size)
+                assertEquals(1, stores[1].closeCount)
+                assertEquals(0, stores[2].closeCount)
+            },
+        )
+        assertTrue(stores.all { it.closeCount == 1 })
+    }
+
+    @Test
+    fun retainViewStore_withoutRetainingOwnerClosesOnDisposal() = runTest(testDispatcher) {
+        val store = TestStore(UiState.Ready(0))
+        withComposition(content = { retainViewStore { store } })
+        assertEquals(1, store.closeCount)
+    }
+
+    @Test
+    fun rememberViewStore_externalStoreRemainsOpenAfterDisposal() = runTest(testDispatcher) {
+        val store = TestStore(UiState.Ready(0))
+        withComposition(content = { rememberViewStore(store) })
+        assertEquals(0, store.closeCount)
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun rememberViewStore_deprecatedAutoClosePreservesCleanupBehavior() = runTest(testDispatcher) {
+        for (autoClose in listOf(false, true)) {
+            val store = TestStore(UiState.Ready(0))
+            withComposition(content = { rememberViewStore(store, autoClose = autoClose) })
+            assertEquals(if (autoClose) 1 else 0, store.closeCount)
+        }
     }
 
     private suspend fun TestScope.withComposition(
