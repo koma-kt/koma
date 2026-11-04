@@ -172,7 +172,7 @@ class WeatherHistoryTest {
                                 snapshot.pendingEntries.values
                                     .single()
                                     .activation,
-                            output = EntryOutput.Transition(context = snapshot.context.copy(phase = next)),
+                            output = EntryOutput.Transition(context = snapshot.context.copy(phase = next), expectedContext = snapshot.context),
                             now = MachineTime.Zero,
                         ),
                 )

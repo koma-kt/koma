@@ -184,6 +184,7 @@ internal class RecordingWireEncoder<C : Any, A : Action, CMD : Any, E : Event>(
             is EntryOutput.Transition<*> -> {
                 put("entryKind", JsonPrimitive("transition"))
                 put("entryContext", json.encodeToJsonElement(this@RecordingWireEncoder.context, output.context as C))
+                put("entryExpectedContext", json.encodeToJsonElement(this@RecordingWireEncoder.context, output.expectedContext as C))
             }
 
             is EntryOutput.Emit<*> -> {

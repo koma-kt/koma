@@ -29,13 +29,18 @@ internal fun GraphControls(
     layout: GraphLayout,
     measurements: GraphMeasurements,
 ) {
+    val legend =
+        when (graph.definition.transitionStructure) {
+            actron.statechart.TransitionStructure.Explicit -> HistoryText.CoverageLegend
+            actron.statechart.TransitionStructure.Conservative -> HistoryText.PotentialTransitionsLegend
+        }
     val zoomIn = historyText(HistoryText.ZoomIn)
     val zoomOut = historyText(HistoryText.ZoomOut)
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
         when (graph.coverage) {
             is HistoryGraphCoverage.Recorded -> {
                 Text(
-                    "${historyText(HistoryText.Coverage)}: ${measurements.covered} / ${graph.definition.transitions.size} · ${historyText(HistoryText.CoverageLegend)}",
+                    "${historyText(HistoryText.Coverage)}: ${measurements.covered} / ${graph.definition.transitions.size} · ${historyText(legend)}",
                     Modifier.weight(1f).testTag("graph-coverage"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -45,7 +50,10 @@ internal fun GraphControls(
             }
 
             HistoryGraphCoverage.Unavailable -> {
-                Spacer(Modifier.weight(1f))
+                when (graph.definition.transitionStructure) {
+                    actron.statechart.TransitionStructure.Explicit -> Spacer(Modifier.weight(1f))
+                    actron.statechart.TransitionStructure.Conservative -> Text(historyText(legend), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
         TextButton({ viewport.transform(surface.size.center, Offset.Zero, 1f / 1.25f) }, Modifier.width(40.dp).testTag("graph-zoom-out").semantics { contentDescription = zoomOut }, contentPadding = PaddingValues(0.dp)) { Text("−") }

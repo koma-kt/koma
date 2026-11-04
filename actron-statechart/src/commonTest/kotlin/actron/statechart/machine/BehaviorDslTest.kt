@@ -113,7 +113,7 @@ class BehaviorDslTest {
                 .single()
                 .activation
         val restarted = machine.decide(snapshot = started, input = MachineInput.Dispatch(action = Search(query = "new"), now = MachineTime.Zero)).snapshot
-        val stale = machine.decide(snapshot = restarted, input = MachineInput.EntryResult(activation = old, output = EntryOutput.Transition(context = Phase.Loading(query = "old")), now = MachineTime.Zero))
+        val stale = machine.decide(snapshot = restarted, input = MachineInput.EntryResult(activation = old, output = EntryOutput.Transition(context = Phase.Loading(query = "old"), expectedContext = Phase.Idle), now = MachineTime.Zero))
         assertIs<DecisionOutcome.Ignored>(value = stale.outcome)
         assertEquals(expected = restarted, actual = stale.snapshot)
         assertEquals(expected = 0, actual = calls)

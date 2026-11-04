@@ -59,29 +59,19 @@ object CitySearchMachine {
             initial = RequestState.Idle,
             phaseOf = { state: CitySearchState -> state.phase },
         ) {
+            on<CitySearchAction.ChangeQuery> { action ->
+                transitionTo(
+                    state =
+                        state.copy(
+                            query = action.query,
+                            revision = state.revision + 1,
+                            phase = RequestState.QueryChanged,
+                        ),
+                )
+            }
             state<RequestState.Idle> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
             }
             state<RequestState.QueryChanged> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
                 onEnter {
                     transitionTo(
                         state =
@@ -97,32 +87,12 @@ object CitySearchMachine {
                 }
             }
             state<RequestState.Debouncing> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
                 onEnter {
                     delay(duration = 350.milliseconds)
                     transitionTo(state = state.copy(phase = RequestState.Loading))
                 }
             }
             state<RequestState.Loading> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
                 onEnter {
                     withTimeoutOrNull<Unit>(timeout = 8.seconds) {
                         command(command = SearchCitiesCommand(query = state.query.trim(), revision = state.revision))
@@ -142,28 +112,8 @@ object CitySearchMachine {
                 }
             }
             state<RequestState.Success<List<CityOption>>> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
             }
             state<RequestState.Error> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
             }
         }
 
