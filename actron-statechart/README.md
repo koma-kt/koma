@@ -662,7 +662,7 @@ exit cancels it and a self-transition restarts it. Checkpoints retain its remain
 Both use the same `guard / target / update` blocks (their unused input is `Unit`).
 The same declarations feed graph export, decision explanations and guard-outcome coverage.
 They describe structure; arbitrary Kotlin predicates are not statically proven reachable.
-The previous typed `after(delay) { target { ... } }` overload is replaced by this declaration;
+The previous typed `after<Target>(delay) { ... }` overload is replaced by this declaration;
 other typed operations and the behavior DSL remain available.
 
 The complete [city search machine](../examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt)
