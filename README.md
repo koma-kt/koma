@@ -156,7 +156,7 @@ feature's behaviour.
 | Hierarchical phases | Connected contains Idle and ChatOpen | `compound<Parent>`; one active child at a time |
 | Parallel phases | Connection status and upload status evolve independently | `parallelStateMachine` regions, or nested `parallel<Parent>` |
 | Return to a previous substate | Resume an interrupted multi-step editor | `history()` / `history(deep = true)` and `onHistory<Action, Parent>()` |
-| Timed work | Debounce or request timeout | Suspend `onEnter` with coroutine delay/timeout; explicit charts also offer `after<Target>` |
+| Timed work | Debounce or request timeout | Suspend `onEnter` with coroutine delay/timeout; explicit charts also offer `after(delay) { target { ... } }` |
 
 Keep changing data such as queries and counters in context fields. Use distinct states when
 allowed actions or work lifetimes change. The typed DSL derives graph IDs from state types;

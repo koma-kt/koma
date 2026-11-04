@@ -8,10 +8,8 @@ import actron.example.weather.feature.cities.domain.CityOption
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
 import actron.statechart.machine.Machine
-import actron.statechart.machine.behaviorStateMachine
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
+import actron.statechart.machine.TypedMachineStateBuilder
+import actron.statechart.machine.typedStateMachine
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -49,123 +47,62 @@ data class SearchCitiesCommand(
     val revision: Long,
 )
 
-/** State-local behavior; the executor owns entry work and cancels it on state exit. */
+/** Declared transitions share one graph with execution, guards and activation-owned timers. */
 object CitySearchMachine {
-    // Stores own snapshots and entry jobs; this immutable definition is shared.
+    // Stores own snapshots and commands; this immutable definition is shared.
     private val definition: Machine<CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent> =
-        behaviorStateMachine(
+        typedStateMachine(
             id = DefinitionId(value = "city-search"),
-            version = DefinitionVersion(value = "12"),
+            // v13 declares the graph and preserves timer deadlines across checkpoints.
+            version = DefinitionVersion(value = "13"),
             initial = RequestState.Idle,
-            phaseOf = { state: CitySearchState -> state.phase },
+            readState = { state: CitySearchState -> state.phase },
+            writeState = { state, phase -> state.copy(phase = phase) },
         ) {
-            state<RequestState.Idle> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
-            }
+            state<RequestState.Idle> { queryChanges() }
             state<RequestState.QueryChanged> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
-                onEnter {
-                    transitionTo(
-                        state =
-                            state.copy(
-                                phase =
-                                    if (state.query.isBlank()) {
-                                        RequestState.Idle
-                                    } else {
-                                        RequestState.Debouncing
-                                    },
-                            ),
-                    )
-                }
+                always(transition = {
+                    guard { state.query.isBlank() }
+                    target { RequestState.Idle }
+                })
+                always(transition = {
+                    target { RequestState.Debouncing }
+                })
             }
             state<RequestState.Debouncing> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
-                onEnter {
-                    delay(duration = 350.milliseconds)
-                    transitionTo(state = state.copy(phase = RequestState.Loading))
-                }
+                queryChanges()
+                after(delay = 350.milliseconds, transition = {
+                    target { RequestState.Loading }
+                })
             }
             state<RequestState.Loading> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
-                onEnter {
-                    withTimeoutOrNull<Unit>(timeout = 8.seconds) {
-                        command(command = SearchCitiesCommand(query = state.query.trim(), revision = state.revision))
-                        awaitCancellation()
-                    }
-                    transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Timeout)))
-                }
-                on<CitySearchAction.Found> { action ->
-                    if (action.revision == state.revision) {
-                        transitionTo(state = state.copy(phase = RequestState.Success(value = action.results)))
-                    }
-                }
-                on<CitySearchAction.Failed> { action ->
-                    if (action.revision == state.revision) {
-                        transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Unavailable(message = action.message))))
-                    }
-                }
+                queryChanges()
+                onEnter(block = {
+                    command(command = SearchCitiesCommand(query = context.query.trim(), revision = context.revision))
+                })
+                on<CitySearchAction.Found>(transition = {
+                    guard { action -> action.revision == state.revision }
+                    target { action -> RequestState.Success(value = action.results) }
+                })
+                on<CitySearchAction.Failed>(transition = {
+                    guard { action -> action.revision == state.revision }
+                    target { action -> RequestState.Error(cause = RequestFailure.Unavailable(message = action.message)) }
+                })
+                after(delay = 8.seconds, transition = {
+                    target { RequestState.Error(cause = RequestFailure.Timeout) }
+                })
             }
-            state<RequestState.Success<List<CityOption>>> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
-            }
-            state<RequestState.Error> {
-                on<CitySearchAction.ChangeQuery> { action ->
-                    transitionTo(
-                        state =
-                            state.copy(
-                                query = action.query,
-                                revision = state.revision + 1,
-                                phase = RequestState.QueryChanged,
-                            ),
-                    )
-                }
-            }
+            state<RequestState.Success<List<CityOption>>> { queryChanges() }
+            state<RequestState.Error> { queryChanges() }
         }
 
     fun create(): Machine<CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent> = definition
+}
+
+/** Every stable search phase accepts a replacement query and starts a fresh debounce. */
+private fun TypedMachineStateBuilder<CitySearchState, RequestState<List<CityOption>>, CitySearchAction, SearchCitiesCommand, NoEvent>.queryChanges() {
+    on<CitySearchAction.ChangeQuery>(transition = {
+        target { RequestState.QueryChanged }
+        update { action -> state.copy(query = action.query, revision = state.revision + 1) }
+    })
 }

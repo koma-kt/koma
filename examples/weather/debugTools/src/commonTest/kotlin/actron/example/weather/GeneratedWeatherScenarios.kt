@@ -13,7 +13,6 @@ import actron.example.weather.feature.currentweather.presentation.CurrentWeather
 import actron.example.weather.feature.weather.domain.WeatherReading
 import actron.statechart.machine.DecisionOutcome
 import actron.statechart.machine.DecisionTraceObserver
-import actron.statechart.machine.EntryOutput
 import actron.statechart.machine.ExplainedDecision
 import actron.statechart.machine.Machine
 import actron.statechart.machine.MachineInput
@@ -39,16 +38,13 @@ object GeneratedWeatherScenarios {
         ) { trace ->
             send(action = CitySearchAction.ChangeQuery(query = moscow.name))
             advanceBy(duration = 350.milliseconds)
-            val old =
-                snapshot.pendingEntries.values
-                    .single()
-                    .activation
+            val old = runningCommands.single().id
             val oldRevision = snapshot.context.revision
             send(action = CitySearchAction.ChangeQuery(query = kazan.name))
             advanceBy(duration = 350.milliseconds)
             val lateAction = CitySearchAction.Found(revision = oldRevision, results = listOf(CityOption(city = moscow)))
-            val lateInput = MachineInput.EntryResult(activation = old, output = EntryOutput.Dispatch(action = lateAction), now = MachineTime(sinceStart = scope.testScheduler.currentTime.milliseconds))
-            // Inject an obsolete worker outcome through the same pure decision entrypoint as the queue.
+            val lateInput = MachineInput.CommandResult(command = old, action = lateAction, now = MachineTime(sinceStart = scope.testScheduler.currentTime.milliseconds))
+            // Inject an obsolete command result through the same pure decision entrypoint as the queue.
             val rejected = machine.decideExplained(snapshot = snapshot, input = lateInput)
             assertIs<DecisionOutcome.Ignored>(value = rejected.decision.outcome)
             trace.onDecided(input = InputAttribution.Unattributed, machineInput = lateInput, explained = rejected)

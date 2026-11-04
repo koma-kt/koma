@@ -72,7 +72,7 @@ class GeneratedScenariosTest {
             state<Phase.Idle> { edits() }
             state<Phase.Waiting> {
                 edits()
-                after<Phase.Loading>(5.milliseconds) { Phase.Loading }
+                after(delay = 5.milliseconds) { target { Phase.Loading } }
             }
             state<Phase.Loading> {
                 edits()
@@ -81,7 +81,7 @@ class GeneratedScenariosTest {
                     guard = { context, action -> brokenGuard || action.revision == context.revision },
                     reduce = { context, action -> context.copy(result = action.value) },
                 ) { _, _ -> Phase.Ready }
-                after<Phase.Idle>(20.milliseconds) { Phase.Idle }
+                after(delay = 20.milliseconds) { target { Phase.Idle } }
             }
             state<Phase.Ready> { edits() }
         }
