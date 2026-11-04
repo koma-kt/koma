@@ -518,3 +518,14 @@ no pre-release DSL compatibility shim is retained. The StateChart executor is un
 Weather city-search v13 migrates to declared edges and chart timers: QueryChanged settles
 inside an edit decision, and checkpoints retain debounce/timeout deadlines. Its definition
 version changes because v12 checkpoints describe different work and transitions.
+
+### 2026-11-04: state-preserving behavior updates
+
+The behavior DSL adds root fallback handlers, same-phase `updateState`, and entry-scoped
+`dispatch`. Direct entry replacements carry their expected immutable context and are rejected
+when current context differs. Recording JSON v8 persists that expected context; previous
+unreleased formats are rejected under the unreleased API baseline. Behavior chart metadata
+marks its conservative edge envelope so the inspector does not imply exact reachability.
+These additions coexist with the declared typed DSL; Weather city-search keeps its v13
+declared transitions and checkpoint-preserved timers. See
+[the behavior DSL decision](../adr/2026-10-28-behavior-dsl.md).
