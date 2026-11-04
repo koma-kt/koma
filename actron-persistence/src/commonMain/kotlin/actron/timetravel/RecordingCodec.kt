@@ -13,8 +13,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 
-/** Current JSON recording format. Other versions are rejected. */
-const val RECORDING_FORMAT_VERSION: Int = 6
+/** Version 7 records state-owned onEnter work and its replayable results. Other versions are rejected. */
+const val RECORDING_FORMAT_VERSION: Int = 7
 
 /**
  * What [RecordingCodec.decode] found.

@@ -17,7 +17,7 @@ class FormatVersionsTest {
         mapOf(
             "JOURNAL_FORMAT_VERSION" to 7,
             "JOURNAL_FILE_FORMAT_VERSION" to 1,
-            "RECORDING_FORMAT_VERSION" to 6,
+            "RECORDING_FORMAT_VERSION" to 7,
             "RECORDING_FILE_FORMAT_VERSION" to 1,
             "GroupRecordingFileFormat.VERSION" to 3,
         )

@@ -1,5 +1,6 @@
 # The five on-disk formats are frozen: a version bumps only with a reader of the old version, its golden and a test
 
+> Recording format 7 adds state-owned entry work; see [the behavior DSL decision](./2026-10-28-behavior-dsl.md).
 > The pre-release compatibility and experimental boundary is superseded by [the unreleased API baseline](./2026-10-26-unreleased-api-baseline.md).
 
 
@@ -20,7 +21,7 @@ this policy (roadmap, "Version 5.0"); this ADR states it and `FormatVersionsTest
 |---|---|---|---|
 | `JOURNAL_FORMAT_VERSION` (7) | `actron.observability.Record.kt` | the record model: variants and fields of `JournalEntry` | the decoder reads a segment by the version in its header: variants are added only at the end under new tags, fields only at the end of a variant, so an older segment decodes with the fields it has |
 | `JOURNAL_FILE_FORMAT_VERSION` (1) | `actron.observability.file.JournalFileFormat` | the segment layout: magic, frames, header | a branch on the header's version keeps decoding the old layout |
-| `RECORDING_FORMAT_VERSION` (6) | `actron.timetravel.RecordingCodec` | the JSON of a recording | an explicit `FormatMigration` from the previous version in the codec's own list; an older version without one is `Unsupported`, never defaulted |
+| `RECORDING_FORMAT_VERSION` (7) | `actron.timetravel.RecordingCodec` | the JSON of a recording | an explicit `FormatMigration` from the previous version in the codec's own list; an older version without one is `Unsupported`, never defaulted |
 | `RECORDING_FILE_FORMAT_VERSION` (1) | `actron.timetravel.file.RecordingFileFormat` | the segment layout of a recording file | a branch on the header's version |
 | `GroupRecordingFileFormat.VERSION` (3) | `actron.timetravel.file.GroupRecordingFiles.kt` | the order file's header and entries (JSON) | a field added since is absent in an older segment and its absence has a stated meaning (no cut, no pair); a change of meaning needs a branch on the version |
 

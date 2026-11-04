@@ -33,6 +33,8 @@ data class MachineSnapshot<C : Any>(
     val commands: Map<CommandId, CommandRecord> = emptyMap(),
     val timers: Map<TimerId, TimerRecord> = emptyMap(),
     val counters: MachineCounters = MachineCounters(),
+    /** Unfinished onEnter work, identified by its owning activation. */
+    val pendingEntries: Map<StateId, EntryRecord> = emptyMap(),
 ) : State {
     /**
      * Whether [MachineInput.Start] has been decided.
@@ -86,4 +88,10 @@ data class MachineCounters(
 data class Activation(
     val node: StateId,
     val id: ActivationId,
+)
+
+/** Identity of pending state-owned work, separate from externally registered commands. */
+data class EntryRecord(
+    val activation: ActivationId,
+    val command: CommandId,
 )

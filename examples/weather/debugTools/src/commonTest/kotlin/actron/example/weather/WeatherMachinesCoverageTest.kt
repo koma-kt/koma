@@ -4,8 +4,8 @@ import actron.example.weather.core.fixtures.demoCities
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherAction
-import actron.example.weather.feature.currentweather.presentation.CurrentWeatherContext
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
+import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
 import actron.example.weather.feature.weather.domain.HourlyForecast
 import actron.example.weather.feature.weather.domain.WeatherReading
 import actron.example.weather.feature.weather.presentation.*
@@ -18,22 +18,26 @@ import kotlin.time.Duration.Companion.seconds
 class WeatherMachinesCoverageTest {
     private enum class Phase { Idle, Debouncing, Loading, Success, Error, TimeoutError }
 
+    private suspend fun MachineTestScenario<CitySearchState, CitySearchAction, SearchCitiesCommand, actron.example.weather.core.mvi.NoEvent>.preparePhase(phase: Phase) {
+        if (phase != Phase.Idle) dispatch(CitySearchAction.ChangeQuery("London"))
+        if (phase != Phase.Idle && phase != Phase.Debouncing) advanceTimeBy(350.milliseconds)
+        when (phase) {
+            Phase.Success -> completeCommand { CitySearchAction.Found(it.revision, emptyList()) }
+            Phase.Error -> completeCommand { CitySearchAction.Failed(it.revision, "offline") }
+            Phase.TimeoutError -> advanceTimeBy(8.seconds)
+            else -> Unit
+        }
+    }
+
     @Test
-    fun searchEveryDeclaredTransitionIsExecuted() =
+    fun searchAllowsQueryReplacementFromEveryBusinessPhase() =
         runTest {
             val reports = mutableListOf<MachineCoverage>()
             for (phase in Phase.entries) {
                 for (query in listOf("", "New query")) {
                     reports +=
                         CitySearchMachine.create().test(this, CitySearchState()) {
-                            if (phase != Phase.Idle) dispatch(CitySearchAction.ChangeQuery("London"))
-                            if (phase != Phase.Idle && phase != Phase.Debouncing) advanceTimeBy(350.milliseconds)
-                            when (phase) {
-                                Phase.Success -> completeCommand { CitySearchAction.Found(it.revision, emptyList()) }
-                                Phase.Error -> completeCommand { CitySearchAction.Failed(it.revision, "offline") }
-                                Phase.TimeoutError -> advanceTimeBy(8.seconds)
-                                else -> Unit
-                            }
+                            preparePhase(phase = phase)
                             dispatch(CitySearchAction.ChangeQuery(query))
                             assertEquals(query, context.query)
                             if (query.isEmpty()) {
@@ -47,8 +51,27 @@ class WeatherMachinesCoverageTest {
                 }
             }
             val coverage = reports.reduce { a, b -> a.merge(b) }
-            coverage.assertTransitionsCovered()
-            assertEquals(expected = 11, actual = coverage.transitions.covered.size)
+            val chart = CitySearchMachine.create().chart
+            val observed =
+                coverage.transitions.covered
+                    .map { id -> chart.transitions[id.index].let { "${it.source.value}->${it.target.value}" } }
+                    .toSet()
+            assertEquals(
+                expected =
+                    setOf(
+                        "Idle->QueryChanged",
+                        "QueryChanged->Idle",
+                        "QueryChanged->Debouncing",
+                        "Debouncing->Loading",
+                        "Debouncing->QueryChanged",
+                        "Loading->Success",
+                        "Loading->Error",
+                        "Loading->QueryChanged",
+                        "Success->QueryChanged",
+                        "Error->QueryChanged",
+                    ),
+                actual = observed,
+            )
             println("City Search\n${coverage.describe()}")
         }
 
@@ -57,7 +80,7 @@ class WeatherMachinesCoverageTest {
         runTest(testBody = {
             CityWeatherMachine
                 .create()
-                .test(scope = this, initial = WeatherScreenContext(city = demoCities.first()), scenario = {
+                .test(scope = this, initial = WeatherScreenState(city = demoCities.first()), scenario = {
                     driver.receiveEvent<WeatherScreenEvent.RefreshChildren>()
                     dispatch(action = WeatherScreenAction.Refresh)
                     driver.receiveEvent<WeatherScreenEvent.RefreshChildren>()
@@ -92,17 +115,17 @@ class WeatherMachinesCoverageTest {
         runTest(testBody = {
             val city = demoCities.first()
             val other = demoCities[1]
-            CurrentWeatherMachine.create().test(scope = this, initial = CurrentWeatherContext(city = city), scenario = {
+            CurrentWeatherMachine.create().test(scope = this, initial = CurrentWeatherState(city = city), scenario = {
                 dispatch(action = CurrentWeatherAction.Refresh)
                 val old = driver.runningCommands.single().id
                 dispatch(action = CurrentWeatherAction.Loaded(reading = WeatherReading(city = other, temperature = 1.0, feelsLike = 1.0, wind = 1.0, code = 0, time = "12:00")))
-                expectState<RequestState.Loading>(select = { it.state })
+                expectState<RequestState.Loading>(select = { it.phase })
                 dispatch(action = CurrentWeatherAction.Refresh)
                 assertTrue(actual = old in driver.handler.cancelled)
                 assertEquals(expected = 1, actual = driver.runningCommands.size)
                 assertTrue(actual = driver.runningCommands.none { it.id == old })
                 advanceTimeBy(duration = 8.seconds)
-                expectState<RequestState.Error>(select = { it.state })
+                expectState<RequestState.Error>(select = { it.phase })
             })
         })
 }

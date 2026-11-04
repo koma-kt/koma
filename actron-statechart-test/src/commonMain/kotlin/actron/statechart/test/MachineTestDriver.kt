@@ -57,6 +57,7 @@ class MachineTestDriver<C : Any, A : Action, CMD : Any, E : Event>(
     admission: AdmissionPolicy = AdmissionPolicy.Unbounded,
     mailbox: MailboxConfig<E> = MailboxConfig(),
     checkpoint: ExecutorCheckpoint<C, CMD> = ExecutorCheckpoint.initial(machine.initialSnapshot(context)),
+    observers: List<actron.statechart.machine.DecisionObserver<C, A, CMD, E>> = emptyList(),
     builder: MachineConfiguration<C, A, E>.() -> Unit = {},
 ) {
     private val scheduler = scope.testScheduler
@@ -77,12 +78,12 @@ class MachineTestDriver<C : Any, A : Action, CMD : Any, E : Event>(
     /** The store; every action a test sends goes through its admission. */
     val store: MachineStore<C, A, CMD, E> =
         if (checkpoint.snapshot.isStarted) {
-            resumeMachineStore(machine, checkpoint, handler, executionScope, dispatcher, VirtualMachineClock.startingNow(scheduler), listOf(coverageRecorder), admission = admission, mailbox = mailbox) {
+            resumeMachineStore(machine, checkpoint, handler, executionScope, dispatcher, VirtualMachineClock.startingNow(scheduler), listOf(coverageRecorder) + observers, admission = admission, mailbox = mailbox) {
                 exceptionHandler(ExceptionHandler { failureList += it })
                 builder()
             }
         } else {
-            MachineStore(machine, checkpoint.snapshot.context, handler, executionScope, VirtualMachineClock.startingNow(scheduler), dispatcher, admission = admission, mailbox = mailbox, observers = listOf(coverageRecorder)) {
+            MachineStore(machine, checkpoint.snapshot.context, handler, executionScope, VirtualMachineClock.startingNow(scheduler), dispatcher, admission = admission, mailbox = mailbox, observers = listOf(coverageRecorder) + observers) {
                 exceptionHandler(ExceptionHandler { failureList += it })
                 builder()
             }

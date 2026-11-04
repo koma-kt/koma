@@ -44,16 +44,18 @@ data class MachinePendingWork<CMD : Any>(
     val ending: List<CommandId>,
     val timers: Map<TimerId, Duration>,
     val effects: List<PendingEffect<*>>,
+    val entries: List<actron.statechart.machine.ActivationId> = emptyList(),
 ) {
-    val isIdle: Boolean get() = running.isEmpty() && queued.isEmpty() && ending.isEmpty() && timers.isEmpty() && effects.isEmpty()
+    val isIdle: Boolean get() = listOf(running, queued, ending, timers.keys, effects, entries).all { it.isEmpty() }
 
     override fun toString(): String =
         buildList {
+            if (entries.isNotEmpty()) add("onEnter $entries")
             if (running.isNotEmpty()) add("running ${running.joinToString(",", "[", "]") { "c${it.id.value} ${it.command}" }}")
             if (queued.isNotEmpty()) add("queued ${queued.joinToString(",", "[", "]") { "c${it.id.value} ${it.command}" }}")
             if (ending.isNotEmpty()) add("ending ${ending.joinToString(",", "[", "]") { "c${it.value}" }}")
             if (timers.isNotEmpty()) add("timers ${timers.entries.joinToString(",", "[", "]") { "t${it.key.value} remaining ${it.value}" }}")
-            if (effects.isNotEmpty()) add("effects ${effects.joinToString(",", "[", "]") { "e${it.id.value} ${it.event}${if (it.handling) " (handling)" else ""}" }}")
+            if (effects.isNotEmpty()) add("effects ${effects.joinToString(",", "[", "]") { it.workLabel() }}")
         }.ifEmpty { listOf("nothing") }.joinToString("; ")
 }
 
@@ -65,6 +67,7 @@ fun <C : Any, CMD : Any> ExecutorCheckpoint<C, CMD>.pendingWork(): MachinePendin
         ending = ending.keys.toList(),
         timers = snapshot.timers.mapValues { (_, timer) -> timer.deadline - now },
         effects = effects,
+        entries = snapshot.pendingEntries.values.map { it.activation },
     )
 
 /**
@@ -89,3 +92,5 @@ private suspend fun <C : Any, A : Action, CMD : Any, E : Event> MachineStore<C, 
             (if (unreceived.isNotEmpty()) "; ${unreceived.size} recorded event(s) not received: $unreceived" else ""),
     )
 }
+
+private fun PendingEffect<*>.workLabel(): String = "e${id.value} $event${if (handling) " (handling)" else ""}"

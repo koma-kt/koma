@@ -15,6 +15,13 @@ sealed interface MachineInput<out A : Action> : Action {
      */
     val now: MachineTime
 
+    /** A result of state-owned suspend work; obsolete activations cannot change the machine. */
+    data class EntryResult<out A : Action>(
+        val activation: ActivationId,
+        val output: EntryOutput<A>,
+        override val now: MachineTime,
+    ) : MachineInput<A>
+
     /**
      * Enters the initial configuration; the first input of every run.
      */
@@ -121,4 +128,21 @@ enum class AbandonReason {
 
     /** The lane was busy under [ConcurrencyPolicy.DropIfRunning], so it never ran. */
     Dropped,
+}
+
+/** Serializable outcomes of an onEnter coroutine, replayed without running that coroutine. */
+sealed interface EntryOutput<out A : Action> {
+    data class Transition<C : Any>(
+        val context: C,
+    ) : EntryOutput<Nothing>
+
+    data class Dispatch<out A : Action>(
+        val action: A,
+    ) : EntryOutput<A>
+
+    data class Emit<E : actron.core.Event>(
+        val event: E,
+    ) : EntryOutput<Nothing>
+
+    data object Completed : EntryOutput<Nothing>
 }

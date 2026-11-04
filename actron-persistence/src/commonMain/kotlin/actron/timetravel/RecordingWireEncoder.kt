@@ -8,6 +8,7 @@ import actron.statechart.machine.CommandRegistration
 import actron.statechart.machine.ConcurrencyPolicy
 import actron.statechart.machine.Decision
 import actron.statechart.machine.EffectPolicy
+import actron.statechart.machine.EntryOutput
 import actron.statechart.machine.ExecutorCheckpoint
 import actron.statechart.machine.LaneId
 import actron.statechart.machine.MachineInput
@@ -58,6 +59,7 @@ internal class RecordingWireEncoder<C : Any, A : Action, CMD : Any, E : Event>(
                 },
             timers = timers.entries.sortedBy { it.key.value }.associate { (id, record) -> id.value.toString() to TimerWire(record.transition.index, record.activation.value, record.deadline.sinceStart.toIsoString()) },
             counters = CountersWire(counters.activations, counters.commands, counters.timers, counters.effects),
+            pendingEntries = pendingEntries.entries.sortedBy { it.key.value }.associate { (node, entry) -> node.value to EntryRecordWire(activation = entry.activation.value, command = entry.command.value) },
         )
 
     internal fun ExecutorCheckpoint<C, CMD>.toWire(): CheckpointWire =
@@ -120,6 +122,11 @@ internal class RecordingWireEncoder<C : Any, A : Action, CMD : Any, E : Event>(
             put("type", JsonPrimitive(input.wireType))
             put("now", JsonPrimitive(input.now.sinceStart.toIsoString()))
             when (input) {
+                is MachineInput.EntryResult -> {
+                    put("activation", JsonPrimitive(input.activation.value))
+                    putEntryOutput(output = input.output)
+                }
+
                 is MachineInput.Start -> {
                     Unit
                 }
@@ -163,6 +170,29 @@ internal class RecordingWireEncoder<C : Any, A : Action, CMD : Any, E : Event>(
             }
         }
 
+    private fun kotlinx.serialization.json.JsonObjectBuilder.putEntryOutput(output: EntryOutput<A>) {
+        when (output) {
+            EntryOutput.Completed -> {
+                put("entryKind", JsonPrimitive("completed"))
+            }
+
+            is EntryOutput.Dispatch -> {
+                put("entryKind", JsonPrimitive("dispatch"))
+                put("action", json.encodeToJsonElement(this@RecordingWireEncoder.action, output.action))
+            }
+
+            is EntryOutput.Transition<*> -> {
+                put("entryKind", JsonPrimitive("transition"))
+                put("entryContext", json.encodeToJsonElement(this@RecordingWireEncoder.context, output.context as C))
+            }
+
+            is EntryOutput.Emit<*> -> {
+                put("entryKind", JsonPrimitive("event"))
+                put("entryEvent", json.encodeToJsonElement(this@RecordingWireEncoder.event, output.event as E))
+            }
+        }
+    }
+
     private fun Decision<C, CMD, E>.toWire(): DecisionWire =
         DecisionWire(
             snapshot = snapshot.toWire(),
@@ -198,6 +228,7 @@ internal class RecordingWireEncoder<C : Any, A : Action, CMD : Any, E : Event>(
     private val MachineInput<A>.wireType: String
         get() =
             when (this) {
+                is MachineInput.EntryResult -> "entryResult"
                 is MachineInput.Start -> "start"
                 is MachineInput.Dispatch -> "dispatch"
                 is MachineInput.BridgeReceived -> "bridgeReceived"

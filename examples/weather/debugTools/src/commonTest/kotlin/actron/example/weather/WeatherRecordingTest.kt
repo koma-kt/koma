@@ -36,7 +36,7 @@ internal fun recordingHistory(): WeatherHistory {
                             cut.current.snapshot.copy(
                                 context =
                                     cut.current.snapshot.context
-                                        .copy(state = RequestState.Loading),
+                                        .copy(phase = RequestState.Loading),
                             ),
                     ),
             )

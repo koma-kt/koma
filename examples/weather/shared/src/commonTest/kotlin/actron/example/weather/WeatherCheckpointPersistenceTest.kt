@@ -34,7 +34,7 @@ class WeatherCheckpointPersistenceTest {
         }
 
     @Test
-    fun debounceKeepsRemainingDelayAndCompletedSearchDoesNotReload() =
+    fun restoredDebounceRestartsFullDelayAndCompletedSearchDoesNotReload() =
         runTest {
             val requests = mutableListOf<String>()
             val options = listOf(CityOption(demoCities[0], "saved region"))
@@ -74,7 +74,7 @@ class WeatherCheckpointPersistenceTest {
             machine = instance()
             runCurrent()
             assertEquals(RequestState.Debouncing, machine.state.value.context.phase)
-            advanceTimeBy(249)
+            advanceTimeBy(349)
             runCurrent()
             assertTrue(requests.isEmpty())
             advanceTimeBy(1)

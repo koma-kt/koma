@@ -7,7 +7,7 @@ import actron.example.weather.feature.weather.presentation.CityWeatherIntent
 import actron.example.weather.feature.weather.presentation.CityWeatherScreen
 import actron.example.weather.feature.weather.presentation.WeatherContext
 import actron.example.weather.feature.weather.presentation.toUiState
-import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceState
+import actron.example.weather.feature.weatheradvice.presentation.WeatherAdvicePhase
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
@@ -39,7 +39,7 @@ class WeatherAdviceUiTest {
     fun parentHeaderNamesCityAndAdviceCardEmitsItsOwnDismissIntent() =
         runComposeUiTest(block = {
             val intents = mutableListOf<CityWeatherIntent>()
-            val context = WeatherContext(city = City(name = "London", latitude = 51.5, longitude = -0.1), advice = WeatherAdviceState.Visible(items = listOf(WeatherAdvice.Umbrella, WeatherAdvice.SlipperyRoads)))
+            val context = WeatherContext(city = City(name = "London", latitude = 51.5, longitude = -0.1), advice = WeatherAdvicePhase.Visible(items = listOf(WeatherAdvice.Umbrella, WeatherAdvice.SlipperyRoads)))
             setContent(composable = { CityWeatherScreen(state = context.toUiState(enabled = true), onIntent = { intents.add(element = it) }) })
             onNodeWithTag(testTag = "weather-header").assertExists()
             onNodeWithTag(testTag = "weather-city").assertTextContains(value = "Weather — London")
@@ -54,7 +54,7 @@ class WeatherAdviceUiTest {
     fun failedAdviceOffersItsOwnRetryAndCanStillBeDismissed() =
         runComposeUiTest(block = {
             val intents = mutableListOf<CityWeatherIntent>()
-            val context = WeatherContext(city = City(name = "London", latitude = 51.5, longitude = -0.1), advice = WeatherAdviceState.Error(cause = RequestFailure.Timeout))
+            val context = WeatherContext(city = City(name = "London", latitude = 51.5, longitude = -0.1), advice = WeatherAdvicePhase.Error(cause = RequestFailure.Timeout))
             setContent(composable = { CityWeatherScreen(state = context.toUiState(enabled = true), onIntent = { intents.add(element = it) }) })
             onNodeWithTag(testTag = "advice-retry").performClick()
             onNodeWithTag(testTag = "advice-dismiss").performClick()

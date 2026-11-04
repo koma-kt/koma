@@ -23,6 +23,8 @@ import actron.statechart.machine.DefinitionVersion
 import actron.statechart.machine.EffectEnvelope
 import actron.statechart.machine.EffectId
 import actron.statechart.machine.EffectPolicy
+import actron.statechart.machine.EntryOutput
+import actron.statechart.machine.EntryRecord
 import actron.statechart.machine.ExecutorCheckpoint
 import actron.statechart.machine.IgnoreReason
 import actron.statechart.machine.LaneId
@@ -80,6 +82,7 @@ internal class RecordingWireReader<C : Any, A : Action, CMD : Any, E : Event>(
             commands = commands.entries.associate { (id, record) -> CommandId(id.toLongOrThrow(at)) to CommandRecord(ActivationId(record.scope), if (record.lane == JsonNull) CommandLane.Independent else LaneId(record.lane.text(at, json))) },
             timers = timers.entries.associate { (id, record) -> TimerId(id.toLongOrThrow(at)) to TimerRecord(TransitionId(record.transition), ActivationId(record.activation), MachineTime(record.deadline.toDuration(at))) },
             counters = MachineCounters(counters.activations, counters.commands, counters.timers, counters.effects),
+            pendingEntries = pendingEntries.entries.associate { (node, entry) -> StateId(value = node) to EntryRecord(activation = ActivationId(value = entry.activation), command = CommandId(value = entry.command)) },
         )
 
     internal fun CheckpointWire.toCheckpoint(
@@ -143,6 +146,10 @@ internal class RecordingWireReader<C : Any, A : Action, CMD : Any, E : Event>(
 
         fun command(message: String): CommandId = CommandId(this.command.required(message, at).long(at, json))
         return when (type) {
+            "entryResult" -> {
+                MachineInput.EntryResult(activation = ActivationId(value = activation.required("entry result without activation", at).long(at, json)), output = readEntryOutput(at = at, json = json, contextSerializer = this@RecordingWireReader.context, eventSerializer = this@RecordingWireReader.event, fields = fields, action = { readAction(fields, "$at: entry action") }), now = now)
+            }
+
             "start" -> {
                 MachineInput.Start(now)
             }
@@ -251,4 +258,29 @@ internal class RecordingWireReader<C : Any, A : Action, CMD : Any, E : Event>(
             // An application's non-null Action serializer can legitimately encode JSON null.
             json.decodeFromJsonElement(this@RecordingWireReader.action, this.action)
         }
+}
+
+private fun <C : Any, A : Action, E : Event> InputWire.readEntryOutput(
+    at: String,
+    json: Json,
+    contextSerializer: KSerializer<C>,
+    eventSerializer: KSerializer<E>,
+    fields: Set<String>,
+    action: () -> A,
+): EntryOutput<A> {
+    // Opaque application payloads may encode JSON null; only an absent field is invalid.
+    fun payload(
+        name: String,
+        value: kotlinx.serialization.json.JsonElement,
+    ): kotlinx.serialization.json.JsonElement {
+        if (name !in fields) throw DecodeFailure("missing $name", at)
+        return value
+    }
+    return when (entryKind.required("entry result without kind", at).text(at, json)) {
+        "completed" -> EntryOutput.Completed
+        "dispatch" -> EntryOutput.Dispatch(action = action())
+        "transition" -> EntryOutput.Transition(context = json.decodeFromJsonElement(contextSerializer, payload("entryContext", entryContext)))
+        "event" -> EntryOutput.Emit(event = json.decodeFromJsonElement(eventSerializer, payload("entryEvent", entryEvent)))
+        else -> throw DecodeFailure("unknown entry output", at)
+    }
 }

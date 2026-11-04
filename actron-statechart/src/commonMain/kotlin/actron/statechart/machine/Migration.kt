@@ -32,11 +32,22 @@ internal fun <C : Any, A : Action, CMD : Any, E : Event> Machine<C, A, CMD, E>.v
             ) {
                 add("duplicate activation ids")
             }
-        } else if (snapshot.configuration.active.isNotEmpty() || snapshot.configuration.history.isNotEmpty() || snapshot.activations.isNotEmpty() || snapshot.commands.isNotEmpty() || snapshot.timers.isNotEmpty()) {
+        } else if (listOf(snapshot.configuration.active, snapshot.configuration.history.keys, snapshot.activations.keys, snapshot.commands.keys, snapshot.timers.keys, snapshot.pendingEntries.keys).any { it.isNotEmpty() }) {
             add("unstarted snapshot contains active work")
         }
         if (snapshot.activations.values.any { it.value <= 0 || it.value > snapshot.counters.activations }) add("invalid activation counters")
         if (snapshot.commands.any { (id, record) -> id.value <= 0 || id.value > snapshot.counters.commands || record.scope !in snapshot.activations.values }) add("invalid command ids/scopes")
+        val invalidEntries =
+            snapshot.pendingEntries.any { (node, entry) ->
+                node !in activities || snapshot.activations[node] != entry.activation || !snapshot.validEntryCommand(entry.command)
+            }
+        if (invalidEntries || snapshot.pendingEntries.values
+                .map { it.command }
+                .toSet()
+                .size != snapshot.pendingEntries.size
+        ) {
+            add("invalid pending entries")
+        }
         if (snapshot.timers.any { (id, record) ->
                 id.value <= 0 || id.value > snapshot.counters.timers || record.transition.index !in chart.transitions.indices ||
                     chart.transitions[record.transition.index].let { transition -> !transition.isTimer || snapshot.activations[transition.source] != record.activation }
@@ -94,3 +105,5 @@ class SnapshotMigrations<C : Any>(
         return current
     }
 }
+
+private fun MachineSnapshot<*>.validEntryCommand(command: CommandId): Boolean = command.value in 1..counters.commands && command !in commands

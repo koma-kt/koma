@@ -231,6 +231,34 @@ val transitions = listOf(
 - **Timers.** `MachineStore` runs timers as coroutines, so `runTest` virtual time
   drives them in tests. A timer's guard is asked when it fires, with `TimerFired` as the action.
 
+## State-local Kotlin behavior
+
+`behaviorStateMachine` offers `state<Phase>`, `on<Action>`, suspend `onEnter`, and
+`transitionTo(state = ...)` on the same decision engine. In both handler scopes, `val state`
+is the complete immutable application snapshot captured at invocation. It has no setter;
+propose every update by passing a complete replacement to `transitionTo`. The scope keeps
+reading the original snapshot even after that call. Keep values deeply immutable.
+
+For a wrapper such as `CitySearchState(query, phase, revision)`, supply
+`phaseOf = { state: CitySearchState -> state.phase }`. This selects the graph node without a
+write lens. For a state hierarchy used directly as the snapshot, omit `phaseOf`.
+
+```kotlin
+on<CitySearchAction.ChangeQuery> { action ->
+    transitionTo(state = state.copy(
+        query = action.query,
+        revision = state.revision + 1,
+        phase = RequestState.QueryChanged,
+    ))
+}
+```
+
+`onEnter` executes outside action processing and is cancelled on state exit. Its transition
+results pass through the queue and are checked against their activation before replacing the
+whole state, so an obsolete coroutine cannot overwrite a newer snapshot. Resume restarts only
+unfinished entry bodies; history replay performs no I/O. Arbitrary Kotlin conditions do not
+declare a complete static reachable graph. See the [Weather example](../examples/weather/docs/architecture.md).
+
 ## Replay-ready machine
 
 `actron.statechart.machine` runs a chart as a pure decision function instead of a Store with

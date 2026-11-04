@@ -203,6 +203,7 @@ internal class MachineStoreImpl<C : Any, A : Action, CMD : Any, E : Event>(
             feed = ::enqueue,
             report = ::report,
             recovery = recovery,
+            activities = machine.activities,
             onClosed = { queued, running -> observe { it.onClosed(queued, running) } },
         )
 

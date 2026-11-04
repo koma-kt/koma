@@ -5,19 +5,21 @@ import actron.example.weather.core.domain.City
 import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.feature.weather.domain.WeatherAdvice
-import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceState
+import actron.example.weather.feature.weatheradvice.presentation.WeatherAdvicePhase
+import actron.statechart.machine.BehaviorStateBuilder
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
 import actron.statechart.machine.Machine
-import actron.statechart.machine.TypedMachineStateBuilder
-import actron.statechart.machine.typedStateMachine
+import actron.statechart.machine.behaviorStateMachine
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.seconds
 
 @Serializable
-data class WeatherAdviceContext(
+data class WeatherAdviceState(
     val city: City,
-    val state: WeatherAdviceState = WeatherAdviceState.Ready,
+    val phase: WeatherAdvicePhase = WeatherAdvicePhase.Ready,
 )
 
 @Serializable
@@ -44,51 +46,52 @@ data class LoadWeatherAdvice(
 )
 
 object WeatherAdviceMachine {
-    fun create(): Machine<WeatherAdviceContext, WeatherAdviceAction, LoadWeatherAdvice, NoEvent> =
-        typedStateMachine(
+    fun create(): Machine<WeatherAdviceState, WeatherAdviceAction, LoadWeatherAdvice, NoEvent> =
+        behaviorStateMachine(
             id = DefinitionId(value = "weather-advice"),
-            version = DefinitionVersion(value = "1"),
-            initial = WeatherAdviceState.Ready,
-            readState = { context: WeatherAdviceContext -> context.state },
-            writeState = { context, state -> context.copy(state = state) },
+            version = DefinitionVersion(value = "3"),
+            initial = WeatherAdvicePhase.Ready,
+            phaseOf = { state: WeatherAdviceState -> state.phase },
             build = {
-                state(value = WeatherAdviceState.Ready, build = { refreshAdvice() })
-                state(value = WeatherAdviceState.Loading, build = {
+                state<WeatherAdvicePhase.Ready>(build = { refreshAdvice() })
+                state<WeatherAdvicePhase.Loading>(build = {
                     refreshAdvice()
-                    onEnter(block = { command(command = LoadWeatherAdvice(city = context.city)) })
-                    on<WeatherAdviceAction.Loaded, WeatherAdviceState.Hidden>(
-                        guard = { context, action -> action.city == context.city && action.items.isEmpty() },
-                        to = { _, _ -> WeatherAdviceState.Hidden },
-                    )
-                    on<WeatherAdviceAction.Loaded, WeatherAdviceState.Visible>(
-                        guard = { context, action -> action.city == context.city && action.items.isNotEmpty() },
-                        to = { _, action -> WeatherAdviceState.Visible(items = action.items) },
-                    )
-                    on<WeatherAdviceAction.Failed, WeatherAdviceState.Error>(
-                        to = { _, action -> WeatherAdviceState.Error(cause = RequestFailure.Unavailable(message = action.message)) },
-                    )
-                    after<WeatherAdviceState.Error>(delay = 8.seconds, to = { WeatherAdviceState.Error(cause = RequestFailure.Timeout) })
+                    onEnter {
+                        withTimeoutOrNull<Unit>(timeout = 8.seconds) {
+                            command(command = LoadWeatherAdvice(city = state.city))
+                            awaitCancellation()
+                        }
+                        transitionTo(state = state.copy(phase = WeatherAdvicePhase.Error(cause = RequestFailure.Timeout)))
+                    }
+                    on<WeatherAdviceAction.Loaded> { action ->
+                        if (action.city == state.city) {
+                            transitionTo(state = state.copy(phase = if (action.items.isEmpty()) WeatherAdvicePhase.Hidden else WeatherAdvicePhase.Visible(items = action.items)))
+                        }
+                    }
+                    on<WeatherAdviceAction.Failed> { action ->
+                        transitionTo(state = state.copy(phase = WeatherAdvicePhase.Error(cause = RequestFailure.Unavailable(message = action.message))))
+                    }
                     dismissAdvice()
                 })
-                state<WeatherAdviceState.Hidden>(build = { refreshAdvice() })
-                state<WeatherAdviceState.Visible>(build = {
+                state<WeatherAdvicePhase.Hidden>(build = { refreshAdvice() })
+                state<WeatherAdvicePhase.Visible>(build = {
                     refreshAdvice()
                     dismissAdvice()
                 })
-                state<WeatherAdviceState.Dismissed>(build = { refreshAdvice() })
-                state<WeatherAdviceState.Error>(build = {
+                state<WeatherAdvicePhase.Dismissed>(build = { refreshAdvice() })
+                state<WeatherAdvicePhase.Error>(build = {
                     refreshAdvice()
                     dismissAdvice()
-                    on<WeatherAdviceAction.Retry, WeatherAdviceState.Loading>()
+                    on<WeatherAdviceAction.Retry> { transitionTo(state = state.copy(phase = WeatherAdvicePhase.Loading)) }
                 })
             },
         )
 
-    private fun TypedMachineStateBuilder<WeatherAdviceContext, WeatherAdviceState, WeatherAdviceAction, LoadWeatherAdvice, NoEvent>.refreshAdvice() {
-        on<WeatherAdviceAction.Refresh, WeatherAdviceState.Loading>()
+    private fun BehaviorStateBuilder<WeatherAdviceState, WeatherAdviceAction, LoadWeatherAdvice, NoEvent>.refreshAdvice() {
+        on<WeatherAdviceAction.Refresh> { transitionTo(state = state.copy(phase = WeatherAdvicePhase.Loading)) }
     }
 
-    private fun TypedMachineStateBuilder<WeatherAdviceContext, WeatherAdviceState, WeatherAdviceAction, LoadWeatherAdvice, NoEvent>.dismissAdvice() {
-        on<WeatherAdviceAction.Dismiss, WeatherAdviceState.Dismissed>(to = { _, _ -> WeatherAdviceState.Dismissed })
+    private fun BehaviorStateBuilder<WeatherAdviceState, WeatherAdviceAction, LoadWeatherAdvice, NoEvent>.dismissAdvice() {
+        on<WeatherAdviceAction.Dismiss> { transitionTo(state = state.copy(phase = WeatherAdvicePhase.Dismissed)) }
     }
 }

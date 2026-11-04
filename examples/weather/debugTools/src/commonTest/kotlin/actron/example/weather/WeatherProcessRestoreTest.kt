@@ -10,7 +10,7 @@ import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.weather.domain.*
 import actron.example.weather.feature.weather.presentation.*
-import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceState
+import actron.example.weather.feature.weatheradvice.presentation.WeatherAdvicePhase
 import com.arkivanov.decompose.DefaultComponentContext
 import com.arkivanov.essenty.instancekeeper.InstanceKeeperDispatcher
 import com.arkivanov.essenty.instancekeeper.getOrCreate
@@ -161,11 +161,11 @@ class WeatherProcessRestoreTest {
                         .getChildStack()
                         .value.active.instance,
                 )
-            assertIs<WeatherAdviceState.Visible>(weather.state.value.advice)
+            assertIs<WeatherAdvicePhase.Visible>(weather.state.value.advice)
             weather.onUiEvent(event = CityWeatherIntent.DismissAdvice)
             testScheduler.runCurrent()
             val expected = weather.state.value
-            assertEquals(expected = WeatherAdviceState.Dismissed, actual = expected.advice)
+            assertEquals(expected = WeatherAdvicePhase.Dismissed, actual = expected.advice)
             val bytes = Json.encodeToString(SerializableContainer.serializer(), state.save())
             lifecycle.destroy()
             keeper.destroy()

@@ -37,9 +37,11 @@ internal class CommandScheduler<C : Any, A : Action, CMD : Any, E : Event>(
     private val feed: (MachineInput<A>) -> Unit,
     private val report: (Throwable) -> Unit,
     private val recovery: CommandRecoveryStrategy<CMD, A> = CommandRecoveryStrategy { CommandRecoveryDecision.Restart },
+    activities: Map<actron.statechart.StateId, suspend (EntryExecution<C, A, CMD>) -> Unit> = emptyMap(),
     private val onClosed: (queued: List<CommandId>, running: List<CommandId>) -> Unit = { _, _ -> },
 ) {
     private val scope = CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext[Job]))
+    private val entries = EntryJobs(scope = scope, definitions = activities, handler = handler, clock = clock, feed = feed, report = report)
     private val messages = Channel<Message>(Channel.UNLIMITED)
 
     // Actor state: touched only from `actor`.
@@ -142,6 +144,7 @@ internal class CommandScheduler<C : Any, A : Action, CMD : Any, E : Event>(
                 val checkpoint = message.checkpoint as ExecutorCheckpoint<C, CMD>
                 lastSnapshot = checkpoint.snapshot
                 lanes = checkpoint.lanes
+                entries.update(snapshot = lastSnapshot)
                 for (registration in lanes.running.values) start(registration, recovering = true)
                 for ((id, timer) in lastSnapshot.timers) {
                     timers[id] =
@@ -199,6 +202,7 @@ internal class CommandScheduler<C : Any, A : Action, CMD : Any, E : Event>(
                 }
         }
         for (registration in decision.commands) apply(lanes.admit(registration))
+        entries.update(snapshot = decision.snapshot)
     }
 
     // Carries out a change of the lanes: cancels, reports, starts, in that order.

@@ -496,3 +496,15 @@ retention delegated to Essenty getOrCreateCloseable. Core remains independent of
 new observeEvent registers before returning to prevent startup events overtaking the subscription;
 legacy collectEvent retains its scheduling. StoreObservationTest in core and in the adapter covers
 readiness, recreation with a shared keeper, owner shutdown and cancelled/dead lifecycle observers.
+
+### 2026-10-28 — State-local Kotlin behavior DSL
+
+Actron adds `behaviorStateMachine`, `state<T>`, `on<Action>`, suspend `onEnter` and
+`transitionTo(state = ...)` on the existing StateChart decision engine. Native executors own
+entry jobs; snapshots persist pending activation identities and recording format 7 persists
+entry outcomes. Weather's five machines use this API. See
+[the lifecycle and diagnostics decision](../adr/2026-10-28-behavior-dsl.md).
+
+The owner's readonly-state refinement makes both behavior scopes expose the complete immutable
+`val state`. All replacements use `transitionTo(state = ...)`; `phaseOf` selects graph identity
+without a public write lens. Weather uses full state snapshots and explicit phase fields.

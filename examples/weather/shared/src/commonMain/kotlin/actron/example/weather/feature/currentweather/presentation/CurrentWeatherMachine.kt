@@ -6,18 +6,20 @@ import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.weather.domain.WeatherReading
+import actron.statechart.machine.BehaviorStateBuilder
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
 import actron.statechart.machine.Machine
-import actron.statechart.machine.TypedMachineStateBuilder
-import actron.statechart.machine.typedStateMachine
+import actron.statechart.machine.behaviorStateMachine
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.seconds
 
 @Serializable
-data class CurrentWeatherContext(
+data class CurrentWeatherState(
     val city: City,
-    val state: RequestState<WeatherReading> = RequestState.Ready,
+    val phase: RequestState<WeatherReading> = RequestState.Ready,
 )
 
 @Serializable
@@ -40,29 +42,34 @@ data class LoadCurrentWeather(
 
 /** Reusable feature machine: no screen or sibling action is part of its contract. */
 object CurrentWeatherMachine {
-    fun create(): Machine<CurrentWeatherContext, CurrentWeatherAction, LoadCurrentWeather, NoEvent> =
-        typedStateMachine(
+    fun create(): Machine<CurrentWeatherState, CurrentWeatherAction, LoadCurrentWeather, NoEvent> =
+        behaviorStateMachine(
             id = DefinitionId(value = "current-weather"),
-            version = DefinitionVersion(value = "1"),
+            version = DefinitionVersion(value = "3"),
             initial = RequestState.Ready,
-            readState = { context: CurrentWeatherContext -> context.state },
-            writeState = { context, state -> context.copy(state = state) },
+            phaseOf = { state: CurrentWeatherState -> state.phase },
             build = {
-                val refresh: TypedMachineStateBuilder<CurrentWeatherContext, RequestState<WeatherReading>, CurrentWeatherAction, LoadCurrentWeather, NoEvent>.() -> Unit = {
-                    on<CurrentWeatherAction.Refresh, RequestState.Loading>()
+                val refresh: BehaviorStateBuilder<CurrentWeatherState, CurrentWeatherAction, LoadCurrentWeather, NoEvent>.() -> Unit = {
+                    on<CurrentWeatherAction.Refresh> { transitionTo(state = state.copy(phase = RequestState.Loading)) }
                 }
-                state(value = RequestState.Ready, build = refresh)
-                state(value = RequestState.Loading, build = {
+                state<RequestState.Ready>(build = refresh)
+                state<RequestState.Loading>(build = {
                     refresh()
-                    onEnter(block = { command(command = LoadCurrentWeather(city = context.city)) })
-                    on<CurrentWeatherAction.Loaded, RequestState.Success<WeatherReading>>(
-                        guard = { context, action -> action.reading.city == context.city },
-                        to = { _, action -> RequestState.Success(value = action.reading) },
-                    )
-                    on<CurrentWeatherAction.Failed, RequestState.Error>(
-                        to = { _, action -> RequestState.Error(cause = RequestFailure.Unavailable(message = action.message)) },
-                    )
-                    after<RequestState.Error>(delay = 8.seconds, to = { RequestState.Error(cause = RequestFailure.Timeout) })
+                    onEnter {
+                        withTimeoutOrNull<Unit>(timeout = 8.seconds) {
+                            command(command = LoadCurrentWeather(city = state.city))
+                            awaitCancellation()
+                        }
+                        transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Timeout)))
+                    }
+                    on<CurrentWeatherAction.Loaded> { action ->
+                        if (action.reading.city == state.city) {
+                            transitionTo(state = state.copy(phase = RequestState.Success(value = action.reading)))
+                        }
+                    }
+                    on<CurrentWeatherAction.Failed> { action ->
+                        transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Unavailable(message = action.message))))
+                    }
                 })
                 state<RequestState.Success<WeatherReading>>(build = refresh)
                 state<RequestState.Error>(build = refresh)

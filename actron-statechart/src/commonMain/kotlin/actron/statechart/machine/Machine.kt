@@ -175,6 +175,8 @@ class MachineBuilder<C : Any, A : Action, CMD : Any, E : Event> internal constru
     internal val guardRejections = mutableMapOf<String, String>()
     internal val effects = mutableMapOf<String, (C, Action) -> C>()
     internal val entries = mutableMapOf<StateId, MutableList<MachineEnterScope<C, A, CMD, E>.() -> Unit>>()
+    internal val activities = mutableMapOf<StateId, suspend (EntryExecution<C, A, CMD>) -> Unit>()
+    internal val entryTransitions = mutableMapOf<StateId, (Any) -> EntryDestination<C>>()
     internal val exits = mutableMapOf<StateId, MutableList<MachineExitScope<C, A, E>.() -> Unit>>()
     internal val handlers = mutableMapOf<StateId, MutableList<ActionHandler<C, A, CMD, E>>>()
 
@@ -325,6 +327,9 @@ class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
     val chart: StateChartDefinition,
     config: MachineBuilder<C, A, CMD, E>,
 ) {
+    internal val activities = config.activities.toMap()
+    private val entryTransitions = config.entryTransitions.toMap()
+
     /** The immutable set of named predicates, in declaration order. */
     val invariants: List<MachineInvariant<C>> = config.invariants.values.toList()
     private val enforceInvariants = config.enforceInvariants
@@ -497,6 +502,10 @@ class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
         return try {
             val first =
                 when (input) {
+                    is MachineInput.EntryResult -> {
+                        entryResult(snapshot = snapshot, input = input, trace = trace)
+                    }
+
                     is MachineInput.Start -> {
                         if (snapshot.isStarted) ignored(snapshot, IgnoreReason.AlreadyStarted) else start(snapshot, input)
                     }
@@ -572,6 +581,46 @@ class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
         }
     }
 
+    private fun entryResult(
+        snapshot: MachineSnapshot<C>,
+        input: MachineInput.EntryResult<A>,
+        trace: SelectionObservation,
+    ): Decision<C, CMD, E> {
+        val node =
+            snapshot.pendingEntries.entries
+                .firstOrNull { it.value.activation == input.activation }
+                ?.key
+                ?: return ignored(snapshot, IgnoreReason.StaleCommand)
+        return when (val output = input.output) {
+            EntryOutput.Completed -> {
+                Decision(DecisionOutcome.Handled, snapshot.copy(revision = snapshot.revision + 1, pendingEntries = snapshot.pendingEntries - node))
+            }
+
+            is EntryOutput.Dispatch -> {
+                step(snapshot, input, output.action, changed = false, trace = trace)
+            }
+
+            is EntryOutput.Emit<*> -> {
+                val step = Step(snapshot, input, input)
+                step.emit(event = output.event as E)
+                step.decision(configuration = snapshot.configuration, transitions = emptyList())
+            }
+
+            is EntryOutput.Transition<*> -> {
+                val destination = entryTransitions.getValue(node)(output.context)
+                val step = Step(snapshot, input, input)
+                val result = runtime.stepObserved(snapshot.configuration, snapshot, BehaviorTransition(target = destination.target), observer(trace))
+                check(result is StepResult.Transitioned)
+                step.exit(result.exited)
+                step.context = destination.context
+                step.enter(result.entered)
+                val selected = result.transitions.map { TransitionId(chart.transitions.indexOf(it)) }
+                trace.selected(selected)
+                step.decision(configuration = result.configuration, transitions = selected)
+            }
+        }
+    }
+
     private fun ignored(
         snapshot: MachineSnapshot<C>,
         reason: IgnoreReason,
@@ -639,7 +688,21 @@ class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
             trace.handled(node)
             val step = Step(base, input, action)
             step.handle(node, handler.rule)
-            step.decision(configuration = base.configuration, transitions = emptyList())
+            when (val destination = step.destination) {
+                ActionDestination.Stay -> {
+                    step.decision(configuration = base.configuration, transitions = emptyList())
+                }
+
+                is ActionDestination.Move -> {
+                    val result = runtime.stepObserved(base.configuration, base, BehaviorTransition(target = destination.target), observer(trace))
+                    check(result is StepResult.Transitioned) { "Requested transition is not part of this machine" }
+                    val selected = result.transitions.map { TransitionId(chart.transitions.indexOf(it)) }
+                    trace.selected(selected)
+                    step.exit(result.exited)
+                    step.enter(result.entered)
+                    step.decision(configuration = result.configuration, transitions = selected)
+                }
+            }
         }, unhandled)
 
     private inline fun <R : Any> routeHandler(
@@ -763,9 +826,11 @@ class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
     ) {
         var context: C = base.context
         var counters: MachineCounters = base.counters
+        var destination: ActionDestination = ActionDestination.Stay
         val exited = mutableListOf<Activation>()
         val entered = mutableListOf<Activation>()
         val commands = mutableListOf<CommandRegistration<CMD>>()
+        val entryWork = mutableMapOf<StateId, EntryRecord>()
         val timersScheduled = mutableListOf<TimerSchedule>()
         val effects = mutableListOf<EffectEnvelope<E>>()
 
@@ -786,6 +851,10 @@ class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
                 val activation = Activation(node, ActivationId(counters.activations + 1))
                 counters = counters.copy(activations = activation.id.value)
                 entered += activation
+                if (node in activities) {
+                    counters = counters.copy(commands = counters.commands + 1)
+                    entryWork[node] = EntryRecord(activation = activation.id, command = CommandId(value = counters.commands))
+                }
                 for (rule in entries[node].orEmpty()) {
                     val scope = EnterScope(activation)
                     scope.rule()
@@ -817,6 +886,7 @@ class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
                     commands = commandsKept + commands.associate { it.id to CommandRecord(it.scope, it.lane) },
                     timers = (base.timers - timersCancelled.toSet()) + timersScheduled.associate { it.id to TimerRecord(it.transition, it.activation, it.deadline) },
                     counters = counters,
+                    pendingEntries = (base.pendingEntries - exitedNodes) + entryWork,
                 )
             return Decision(
                 outcome = DecisionOutcome.Handled,
@@ -883,8 +953,14 @@ class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
         inner class ActionScope(
             owner: Activation,
         ) : Scope(owner),
-            MachineActionScope<C, A, CMD, E> {
+            MachineActionScope<C, A, CMD, E>,
+            TransitionRequestScope {
             override val action: Action get() = this@Step.action
+
+            override fun requestTransition(target: StateId) {
+                check(destination == ActionDestination.Stay) { "An action handler can request only one transition" }
+                destination = ActionDestination.Move(target = target)
+            }
 
             override fun command(command: CMD): CommandId = register(command, CommandLane.Independent, ConcurrencyPolicy.Independent)
 
@@ -902,7 +978,7 @@ class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
             override val action: Action get() = this@Step.action
         }
 
-        private fun emit(event: E): EffectId {
+        fun emit(event: E): EffectId {
             val id = EffectId(counters.effects + 1)
             counters = counters.copy(effects = id.value)
             effects += EffectEnvelope(id, event)

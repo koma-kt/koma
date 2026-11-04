@@ -3,142 +3,70 @@
 [Example README](../../../README.md) · [Architecture](../../../docs/architecture.md) ·
 [Actron test API](../../../../../actron-statechart-test/README.md)
 
-This directory contains both tests of the pure decision model and tests of the real queued
-executor. Choose the level that matches the behavior being checked. HTTP tests use Ktor
-MockEngine; none of these tests needs the public weather server.
+Weather uses `behaviorStateMachine`: synchronous action handlers and suspend state-owned entry
+work. Tests run the real queued executor with scripted requests and virtual time. HTTP decoding
+tests use Ktor MockEngine, never the public weather server.
 
-## Where to start
-
-| File | What it demonstrates |
+| File | Contract checked |
 | --- | --- |
-| [AdvancedWeatherTestingTest](kotlin/actron/example/weather/AdvancedWeatherTestingTest.kt) | Temporal obligations, executor ordering/errors/timeout/restart, mutation testing |
-| [CitySearchScenarioTest](kotlin/actron/example/weather/CitySearchScenarioTest.kt) | Handwritten `machine.test` scenario, virtual debounce, command answers and assertions |
-| [WeatherScenarioTest](kotlin/actron/example/weather/WeatherScenarioTest.kt) | Execute the standalone forecast machine without a screen or siblings |
-| [GeneratedWeatherScenarios](kotlin/actron/example/weather/GeneratedWeatherScenarios.kt) | Finite input data, command answers, rules and required goals |
-| [GeneratedWeatherScenariosTest](kotlin/actron/example/weather/GeneratedWeatherScenariosTest.kt) | Generate, replay, measure coverage and project traces into display recordings |
-| [CitySearchTest](kotlin/actron/example/weather/CitySearchTest.kt) | Real Store/handler/repository chain, HTTP decoding, cancellation and late callbacks |
-| [WeatherMachinesCoverageTest](kotlin/actron/example/weather/WeatherMachinesCoverageTest.kt) | Merge actual transition coverage from executor scenarios |
-| [GeneratedRecordingFilesTest](../jvmTest/kotlin/actron/example/weather/GeneratedRecordingFilesTest.kt) | JVM file-writing adapter for generated view-only recordings |
+| AdvancedWeatherTestingTest | Finite executor schedules, timeout boundary, cancellation, restart, city guard |
+| CitySearchScenarioTest | Debounce, success, failure, timeout and clearing |
+| WeatherScenarioTest | Standalone forecast and advice lifecycles, retry, dismissal and timeout |
+| GeneratedWeatherScenarios | Recorded executor scenarios with late worker output and late action |
+| GeneratedWeatherScenariosTest | Replay without I/O and importable display recordings |
+| CitySearchTest | Store/handler/repository integration and cancellation of HTTP |
+| WeatherMachinesCoverageTest | Observed state-pair coverage and replacing a query from every phase |
+| WeatherHierarchyTest | One parent refresh, three independent children, independent dismissal |
+| GeneratedRecordingFilesTest | JVM export of executed scenarios |
 
-## Write a specific scenario
-
-Use this when the exact ordering or execution behavior matters. Inside `runTest`, the DSL
-creates a `MachineTestDriver` with a real queued Store, scripted commands and a virtual clock.
+## Drive an actual machine
 
 ```kotlin
-CitySearchMachine.create().test(this, CitySearchState()) {
-    dispatch(CitySearchAction.ChangeQuery("London"))
-    expectState<RequestState.Debouncing> { it.phase }
-    advanceTimeBy(350.milliseconds)
-    expectState<RequestState.Loading> { it.phase }
+CitySearchMachine.create().test(scope = this, initial = CitySearchState()) {
+    dispatch(action = CitySearchAction.ChangeQuery(query = "London"))
+    expectState<RequestState.Debouncing>(select = { it.phase })
+    advanceTimeBy(duration = 350.milliseconds)
+    expectState<RequestState.Loading>(select = { it.phase })
     completeCommand { command ->
-        CitySearchAction.Found(command.revision, emptyList())
+        CitySearchAction.Found(revision = command.revision, results = emptyList())
     }
-    expectState<RequestState.Success<List<CityOption>>> { it.phase }
+    expectState<RequestState.Success<List<CityOption>>>(select = { it.phase })
 }
 ```
 
-`dispatch` waits for the action to be processed. `advanceTimeBy` moves virtual time rather than
-sleeping. `completeCommand` supplies a typed result for the matching actual command; it does
-not call HTTP. Each standalone feature driver exposes only that machine's own command type.
-Composition tests use the production WeatherMachines owner and typed group routes. The DSL checks unexpected
-failures/pending work and closes the driver. Use `allowPendingWork` only when ending with work
-in progress is intentional.
+`dispatch` settles immediate queued work. `advanceTimeBy` advances coroutine virtual time.
+`completeCommand` supplies the actual request's result; it does not invoke HTTP. The driver
+asserts no unexpected failures or pending work and closes its executor. `allowPendingWork` is
+only for scenarios intentionally ending during execution.
 
-## Let the graph discover scenarios
+## Explore delivery schedules
 
-`GeneratedWeatherScenarios.search()` declares a model; it does not start a Store or HTTP client.
-It calls `machine.scenarios(initial) { ... }` with four kinds of declarations:
+`exploreSchedules` runs a fresh real executor for each bounded prefix. Tests provide finite
+choices such as answering the current request, editing the query, advancing time or restarting.
+Assertions check the state after each step, and failures retain the actual operation sequence.
+This covers entry coroutines and cancellation; a pure static graph explorer cannot execute them.
 
-| API | Developer supplies | What Actron does |
-| --- | --- | --- |
-| `actions` | Finite payload choices; Weather limits query edits to two | Select declared action types at the active nodes |
-| `replies` | Success/error payloads for the actual command | Preserve command identity/revision and explore result choices |
-| `rule` | A property of before/input/after that must always hold | Check each explored decision, including ignored inputs |
-| `goal` | A situation that must occur on at least one path | Keep a concrete witness, or report the goal as missing |
+Arbitrary Kotlin conditions do not declare a complete reachable graph. The machine chart's
+source/target envelope is conservative; do not assert every envelope edge is reachable or mutate
+a chart guard to pretend that an ordinary Kotlin `if` was removed. Weather asserts observed
+state-pair coverage, positive/negative outcomes, and every relevant business phase. Full static
+coverage and guard mutations remain supported for the explicit graph DSL elsewhere in Actron.
 
-The graph and actual decisions provide transitions, command registrations and timers. The
-generator chooses their order. Weather supplies empty/Moscow/Kazan queries, not a prescribed
-Moscow→Kazan script.
+## Cancellation and late outcomes
 
-```kotlin
-val model = GeneratedWeatherScenarios.search()
-val generated = model.generate(maxDepth = 6, maxDecisions = 100_000)
-generated.assertSuccess()
+Changing query exits the old activation before the new debounce finishes. Repository integration
+checks cancellation reaches HTTP. A recorded scenario also feeds an obsolete activation's outcome
+through the production decision entrypoint and verifies rejection, then sends an obsolete action
+to check revision protection independently. The core DSL tests additionally use a NonCancellable
+old entry coroutine to reproduce delivery after exit.
 
-val scenario = generated.witnesses.getValue("kazan-success-after-late-moscow")
-val trace = model.record(scenario)
-trace.assertSuccess()
-println(trace.coverage.describe(model.machine.chart))
-```
+## Record and replay
 
-`generate` is bounded pure-model exploration using the real decision function. It does not
-test coroutine scheduling, HTTP behavior or executor lane arbitration. Its `assertSuccess`
-rejects rule failures, budget exhaustion, uncovered target transitions and missing goals.
-With the current data, the selected scenarios cover 11/11 search, 7/7 current-weather, 11/11 forecast and 14/14 advice transitions; the parent Refresh is tested separately.
-This does not imply every guard outcome, payload or longer sequence was tested.
-
-`record` reruns the discovered inputs from the same initial context and retains each actual
-before/input/after decision. On failure, `generated.exploration.failures` contains the exact
-input prefix and state; use `model.record(MachineScenario("regression", failure.inputs))` to
-reproduce it with the same rules. Keep generators and reducers deterministic and data immutable.
-
-### Why test both cancellation and a late reply?
-
-Changing the query must cancel the old command immediately, before waiting for the next
-350 ms debounce. The generated rule asserts old command removal and its cancelled scope.
-`CitySearchTest` additionally checks cancellation reaching a suspended Ktor MockEngine request.
-
-Late-result tests then check defense against races: `LateCommand` injects a result with an old
-command ID; `LateAction` injects an old payload directly to check the query revision guard.
-Neither keeps the cancelled HTTP request alive. The goal requires the old Moscow response to
-arrive while Kazan is loading; otherwise a stale-response rule could pass without ever seeing
-a stale response. Another goal requires Kazan to succeed afterwards.
-
-## View the discovered sequence in the inspector
-
-`searchRecording(trace)` / `weatherRecording(trace)` show the application adapter. They call
-`trace.recording` from the optional `actron-timetravel-test` module, serialize context fields,
-and supply a `WeatherRecordingFrame` with screen data, active nodes and transition hits.
-Weather's existing schema and graph definitions let its import codec validate compatibility.
-The exporter retains ignored events too: a stale response appears even though its before/after
-states are equal.
-
-From the repository root:
+`GeneratedWeatherScenarios.search(scope = this)` records a concrete executed scenario. Its trace
+can be replayed through `Machine.decide` without launching `onEnter`. The display exporter retains
+ignored outcomes, context, active nodes and observed transition hits. JVM tests write importable
+files under `debugTools/build/generated-scenarios/`.
 
 ```sh
-./gradlew :weather:shared:jvmTest --tests '*Generated*'
-./gradlew :weather:desktopApp:run
+./gradlew :weather:shared:jvmTest :weather:debugTools:jvmTest
 ```
-
-Open Settings → Debug panel → Import beside the machine filter. Choose a file under
-`examples/weather/shared/build/generated-scenarios/`:
-
-- `late-moscow-command.actron.json`: cancelled Moscow request, stale result, Kazan success.
-- `late-moscow-action.actron.json`: independent revision-guard verification.
-- `current-weather-success.actron.json`: a standalone current-weather machine reaches Success.
-
-Scrub the timeline and switch between Event and Graph. Imported files contain display data,
-not executable commands; they cannot be continued. The typed in-memory scenario is the
-executable test. `GeneratedRecordingFilesTest` owns file writing, so common tests have no
-platform file-picker dependency.
-
-Run all Weather tests with `./gradlew :weather:shared:jvmTest`. For library-level changes,
-also run the affected `:actron-statechart-test` or `:actron-timetravel-test` target. Test API
-contracts and generation limits are documented in the [library guide](../../../../../actron-statechart-test/README.md).
-
-## Temporal, executor-order and mutation examples
-
-Start with [the developer guide](../../../../../doc/guides/temporal-schedules-and-profiling.md).
-`AdvancedWeatherTestingTest` supplies finite reply fixtures and checks the actual executor
-under both weather response orders, query replacement and restart during debounce/HTTP.
-Its temporal rule correlates search generations, and its mutation test proves the assertions
-notice removal of the guard that rejects another city's weather.
-
-```shell
-./gradlew :weather:shared:jvmTest --tests '*AdvancedWeatherTestingTest'
-```
-
-These checks are bounded. They do not claim correctness for every possible city, arbitrary
-thread interleavings or unbounded future events. The tests assert that required schedules
-were actually visited, in addition to asserting the absence of violations.

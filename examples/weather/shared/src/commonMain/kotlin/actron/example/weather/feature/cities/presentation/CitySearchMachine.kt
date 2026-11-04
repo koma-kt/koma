@@ -5,7 +5,13 @@ import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.domain.CityOption
-import actron.statechart.machine.*
+import actron.statechart.machine.DefinitionId
+import actron.statechart.machine.DefinitionVersion
+import actron.statechart.machine.Machine
+import actron.statechart.machine.behaviorStateMachine
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -43,64 +49,123 @@ data class SearchCitiesCommand(
     val revision: Long,
 )
 
-/**
- * Pure screen behavior: edits/results/timers produce a new context and descriptions of work.
- * HTTP runs in citySearchHandler, not in this DSL. See docs/architecture.md for the full flow.
- */
+/** State-local behavior; the executor owns entry work and cancels it on state exit. */
 object CitySearchMachine {
-    fun create(): Machine<CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent> =
-        typedStateMachine(
-            // Stable identity groups instances in the inspector; version protects persisted data.
+    // Stores own snapshots and entry jobs; this immutable definition is shared.
+    private val definition: Machine<CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent> =
+        behaviorStateMachine(
             id = DefinitionId(value = "city-search"),
-            version = DefinitionVersion(value = "10"),
+            version = DefinitionVersion(value = "12"),
             initial = RequestState.Idle,
-            // phase is the single state value; the DSL derives its graph nodes from state<T>.
-            readState = { context: CitySearchState -> context.phase },
-            writeState = { context, phase: RequestState<List<CityOption>> -> context.copy(phase = phase) },
-            build = {
-                state(value = RequestState.Idle, build = { queryChanges() })
-                state(value = RequestState.QueryChanged, build = {
-                    // Resolve the updated query before the executor publishes this decision.
-                    always<RequestState.Idle>(guard = { context -> context.query.isBlank() })
-                    always<RequestState.Debouncing>(guard = { context -> context.query.isNotBlank() })
-                })
-                state(value = RequestState.Debouncing, build = {
-                    queryChanges()
-                    // Leaving/re-entering Debouncing cancels/restarts this activation's timer.
-                    after<RequestState.Loading>(delay = 350.milliseconds, to = { RequestState.Loading })
-                })
-                state<RequestState.Loading>(build = { searchRequest() })
-                state<RequestState.Success<List<CityOption>>>(build = { queryChanges() })
-                state<RequestState.Error>(build = { queryChanges() })
-            },
-        )
+            phaseOf = { state: CitySearchState -> state.phase },
+        ) {
+            state<RequestState.Idle> {
+                on<CitySearchAction.ChangeQuery> { action ->
+                    transitionTo(
+                        state =
+                            state.copy(
+                                query = action.query,
+                                revision = state.revision + 1,
+                                phase = RequestState.QueryChanged,
+                            ),
+                    )
+                }
+            }
+            state<RequestState.QueryChanged> {
+                on<CitySearchAction.ChangeQuery> { action ->
+                    transitionTo(
+                        state =
+                            state.copy(
+                                query = action.query,
+                                revision = state.revision + 1,
+                                phase = RequestState.QueryChanged,
+                            ),
+                    )
+                }
+                onEnter {
+                    transitionTo(
+                        state =
+                            state.copy(
+                                phase =
+                                    if (state.query.isBlank()) {
+                                        RequestState.Idle
+                                    } else {
+                                        RequestState.Debouncing
+                                    },
+                            ),
+                    )
+                }
+            }
+            state<RequestState.Debouncing> {
+                on<CitySearchAction.ChangeQuery> { action ->
+                    transitionTo(
+                        state =
+                            state.copy(
+                                query = action.query,
+                                revision = state.revision + 1,
+                                phase = RequestState.QueryChanged,
+                            ),
+                    )
+                }
+                onEnter {
+                    delay(duration = 350.milliseconds)
+                    transitionTo(state = state.copy(phase = RequestState.Loading))
+                }
+            }
+            state<RequestState.Loading> {
+                on<CitySearchAction.ChangeQuery> { action ->
+                    transitionTo(
+                        state =
+                            state.copy(
+                                query = action.query,
+                                revision = state.revision + 1,
+                                phase = RequestState.QueryChanged,
+                            ),
+                    )
+                }
+                onEnter {
+                    withTimeoutOrNull<Unit>(timeout = 8.seconds) {
+                        command(command = SearchCitiesCommand(query = state.query.trim(), revision = state.revision))
+                        awaitCancellation()
+                    }
+                    transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Timeout)))
+                }
+                on<CitySearchAction.Found> { action ->
+                    if (action.revision == state.revision) {
+                        transitionTo(state = state.copy(phase = RequestState.Success(value = action.results)))
+                    }
+                }
+                on<CitySearchAction.Failed> { action ->
+                    if (action.revision == state.revision) {
+                        transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Unavailable(message = action.message))))
+                    }
+                }
+            }
+            state<RequestState.Success<List<CityOption>>> {
+                on<CitySearchAction.ChangeQuery> { action ->
+                    transitionTo(
+                        state =
+                            state.copy(
+                                query = action.query,
+                                revision = state.revision + 1,
+                                phase = RequestState.QueryChanged,
+                            ),
+                    )
+                }
+            }
+            state<RequestState.Error> {
+                on<CitySearchAction.ChangeQuery> { action ->
+                    transitionTo(
+                        state =
+                            state.copy(
+                                query = action.query,
+                                revision = state.revision + 1,
+                                phase = RequestState.QueryChanged,
+                            ),
+                    )
+                }
+            }
+        }
 
-    private fun TypedMachineStateBuilder<CitySearchState, RequestState<List<CityOption>>, CitySearchAction, SearchCitiesCommand, NoEvent>.searchRequest() {
-        queryChanges()
-        onEnter(block = {
-            // Register data for the executor. Exiting Loading cancels its command immediately.
-            command(
-                command = SearchCitiesCommand(query = context.query.trim(), revision = context.revision),
-                lane = LaneId(value = "city-search"),
-                policy = ConcurrencyPolicy.Latest,
-            )
-        })
-        on<CitySearchAction.Found, RequestState.Success<List<CityOption>>>(
-            // Defense for old callbacks delivered outside normal command-result identity checks.
-            guard = { context, action -> action.revision == context.revision },
-            to = { _, action -> RequestState.Success(value = action.results) },
-        )
-        on<CitySearchAction.Failed, RequestState.Error>(
-            guard = { context, action -> action.revision == context.revision },
-            to = { _, action -> RequestState.Error(cause = RequestFailure.Unavailable(message = action.message)) },
-        )
-        after<RequestState.Error>(delay = 8.seconds, to = { RequestState.Error(cause = RequestFailure.Timeout) })
-    }
-
-    private fun TypedMachineStateBuilder<CitySearchState, RequestState<List<CityOption>>, CitySearchAction, SearchCitiesCommand, NoEvent>.queryChanges() {
-        // Every edit updates query/revision once; QueryChanged owns the automatic choice.
-        transition<CitySearchAction.ChangeQuery, RequestState.QueryChanged>(
-            reduce = { context, action -> context.copy(query = action.query, revision = context.revision + 1) },
-        )
-    }
+    fun create(): Machine<CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent> = definition
 }

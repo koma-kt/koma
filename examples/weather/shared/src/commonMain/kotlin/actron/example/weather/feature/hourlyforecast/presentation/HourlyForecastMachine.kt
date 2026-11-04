@@ -6,18 +6,20 @@ import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.weather.domain.HourlyForecast
+import actron.statechart.machine.BehaviorStateBuilder
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
 import actron.statechart.machine.Machine
-import actron.statechart.machine.TypedMachineStateBuilder
-import actron.statechart.machine.typedStateMachine
+import actron.statechart.machine.behaviorStateMachine
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.seconds
 
 @Serializable
-data class HourlyForecastContext(
+data class HourlyForecastState(
     val city: City,
-    val state: RequestState<HourlyForecast> = RequestState.Ready,
+    val phase: RequestState<HourlyForecast> = RequestState.Ready,
 )
 
 @Serializable
@@ -42,30 +44,35 @@ data class LoadHourlyForecast(
 
 /** Reusable feature machine: no screen or sibling action is part of its contract. */
 object HourlyForecastMachine {
-    fun create(): Machine<HourlyForecastContext, HourlyForecastAction, LoadHourlyForecast, NoEvent> =
-        typedStateMachine(
+    fun create(): Machine<HourlyForecastState, HourlyForecastAction, LoadHourlyForecast, NoEvent> =
+        behaviorStateMachine(
             id = DefinitionId(value = "hourly-forecast"),
-            version = DefinitionVersion(value = "1"),
+            version = DefinitionVersion(value = "3"),
             initial = RequestState.Ready,
-            readState = { context: HourlyForecastContext -> context.state },
-            writeState = { context, state -> context.copy(state = state) },
+            phaseOf = { state: HourlyForecastState -> state.phase },
             build = {
-                val refresh: TypedMachineStateBuilder<HourlyForecastContext, RequestState<HourlyForecast>, HourlyForecastAction, LoadHourlyForecast, NoEvent>.() -> Unit = {
-                    on<HourlyForecastAction.Refresh, RequestState.Loading>()
-                    on<HourlyForecastAction.Retry, RequestState.Loading>()
+                val refresh: BehaviorStateBuilder<HourlyForecastState, HourlyForecastAction, LoadHourlyForecast, NoEvent>.() -> Unit = {
+                    on<HourlyForecastAction.Refresh> { transitionTo(state = state.copy(phase = RequestState.Loading)) }
+                    on<HourlyForecastAction.Retry> { transitionTo(state = state.copy(phase = RequestState.Loading)) }
                 }
-                state(value = RequestState.Ready, build = refresh)
-                state(value = RequestState.Loading, build = {
+                state<RequestState.Ready>(build = refresh)
+                state<RequestState.Loading>(build = {
                     refresh()
-                    onEnter(block = { command(command = LoadHourlyForecast(city = context.city)) })
-                    on<HourlyForecastAction.Loaded, RequestState.Success<HourlyForecast>>(
-                        guard = { context, action -> action.forecast.city == context.city },
-                        to = { _, action -> RequestState.Success(value = action.forecast) },
-                    )
-                    on<HourlyForecastAction.Failed, RequestState.Error>(
-                        to = { _, action -> RequestState.Error(cause = RequestFailure.Unavailable(message = action.message)) },
-                    )
-                    after<RequestState.Error>(delay = 8.seconds, to = { RequestState.Error(cause = RequestFailure.Timeout) })
+                    onEnter {
+                        withTimeoutOrNull<Unit>(timeout = 8.seconds) {
+                            command(command = LoadHourlyForecast(city = state.city))
+                            awaitCancellation()
+                        }
+                        transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Timeout)))
+                    }
+                    on<HourlyForecastAction.Loaded> { action ->
+                        if (action.forecast.city == state.city) {
+                            transitionTo(state = state.copy(phase = RequestState.Success(value = action.forecast)))
+                        }
+                    }
+                    on<HourlyForecastAction.Failed> { action ->
+                        transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Unavailable(message = action.message))))
+                    }
                 })
                 state<RequestState.Success<HourlyForecast>>(build = refresh)
                 state<RequestState.Error>(build = refresh)

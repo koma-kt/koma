@@ -1,31 +1,28 @@
 package actron.example.weather
 
 import actron.example.weather.app.debug.WeatherRecording
+import kotlinx.coroutines.test.runTest
 import java.io.File
 import kotlin.test.Test
 
 /** Import these output files in Weather's inspector to inspect automatically discovered paths. */
 class GeneratedRecordingFilesTest {
-    @Test fun writesImportableSearchAndIndependentWeatherScenarios() {
-        val directory = File("build/generated-scenarios").apply { mkdirs() }
-        val search = GeneratedWeatherScenarios.search()
-        val searches = search.generate(maxDepth = 6, maxDecisions = 100_000)
-        searches.assertSuccess()
-        val weather = GeneratedWeatherScenarios.weather()
-        val forecasts = weather.generate(maxDepth = 5, maxDecisions = 50_000)
-        forecasts.assertSuccess()
-        val recordings =
-            mapOf(
-                "late-moscow-command" to searchRecording(search.record(searches.witnesses.getValue("kazan-success-after-late-moscow"))),
-                "late-moscow-action" to searchRecording(search.record(searches.witnesses.getValue("late-moscow-action"))),
-                "current-weather-success" to weatherRecording(weather.record(forecasts.witnesses.getValue("current-success"))),
-            )
-        for ((name, recording) in recordings) {
-            val file = File(directory, "$name.actron.json")
-            val bytes = WeatherRecording.codec.encode(recording)
-            WeatherRecording.import(bytes)
-            file.writeBytes(bytes)
-            println("Generated scenario recording: ${file.absolutePath}")
+    @Test fun writesImportableSearchAndIndependentWeatherScenarios() =
+        runTest {
+            val directory = File("build/generated-scenarios").apply { mkdirs() }
+            val search = GeneratedWeatherScenarios.search(scope = this)
+            val weather = GeneratedWeatherScenarios.weather(scope = this)
+            val recordings =
+                mapOf(
+                    "late-search-results" to searchRecording(trace = search),
+                    "current-weather-success" to weatherRecording(trace = weather),
+                )
+            for ((name, recording) in recordings) {
+                val file = File(directory, "$name.actron.json")
+                val bytes = WeatherRecording.codec.encode(recording)
+                WeatherRecording.import(bytes)
+                file.writeBytes(bytes)
+                println("Generated scenario recording: ${file.absolutePath}")
+            }
         }
-    }
 }

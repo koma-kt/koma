@@ -8,7 +8,7 @@ import actron.statechart.machine.*
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class WeatherScreenContext(
+data class WeatherScreenState(
     val city: City,
 )
 
@@ -26,17 +26,16 @@ sealed interface WeatherScreenEvent : Event {
 object CityWeatherMachine {
     private data object Active
 
-    fun create(): Machine<WeatherScreenContext, WeatherScreenAction, NoCommand, WeatherScreenEvent> =
-        typedStateMachine(
+    fun create(): Machine<WeatherScreenState, WeatherScreenAction, NoCommand, WeatherScreenEvent> =
+        behaviorStateMachine(
             id = DefinitionId(value = "city-weather"),
-            version = DefinitionVersion(value = "9"),
+            version = DefinitionVersion(value = "10"),
             initial = Active,
-            readState = { _: WeatherScreenContext -> Active },
-            writeState = { context, _ -> context },
+            phaseOf = { _: WeatherScreenState -> Active },
             build = {
-                state(value = Active, build = {
+                state<Active>(build = {
                     onEnter(block = { event(event = WeatherScreenEvent.RefreshChildren) })
-                    on<WeatherScreenAction.Refresh, Active>()
+                    on<WeatherScreenAction.Refresh> { transitionTo(state = state) }
                 })
             },
         )

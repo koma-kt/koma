@@ -374,6 +374,53 @@ sealed interface <#A: out actron.core/Action, #B: out actron.core/Action> actron
     }
 }
 
+sealed interface <#A: out actron.core/Action> actron.statechart.machine/EntryOutput { // actron.statechart.machine/EntryOutput|null[0]
+    final class <#A1: actron.core/Event> Emit : actron.statechart.machine/EntryOutput<kotlin/Nothing> { // actron.statechart.machine/EntryOutput.Emit|null[0]
+        constructor <init>(#A1) // actron.statechart.machine/EntryOutput.Emit.<init>|<init>(1:0){}[0]
+
+        final val event // actron.statechart.machine/EntryOutput.Emit.event|{}event[0]
+            final fun <get-event>(): #A1 // actron.statechart.machine/EntryOutput.Emit.event.<get-event>|<get-event>(){}[0]
+
+        final fun component1(): #A1 // actron.statechart.machine/EntryOutput.Emit.component1|component1(){}[0]
+        final fun copy(#A1 = ...): actron.statechart.machine/EntryOutput.Emit<#A1> // actron.statechart.machine/EntryOutput.Emit.copy|copy(1:0){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart.machine/EntryOutput.Emit.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // actron.statechart.machine/EntryOutput.Emit.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // actron.statechart.machine/EntryOutput.Emit.toString|toString(){}[0]
+    }
+
+    final class <#A1: kotlin/Any> Transition : actron.statechart.machine/EntryOutput<kotlin/Nothing> { // actron.statechart.machine/EntryOutput.Transition|null[0]
+        constructor <init>(#A1) // actron.statechart.machine/EntryOutput.Transition.<init>|<init>(1:0){}[0]
+
+        final val context // actron.statechart.machine/EntryOutput.Transition.context|{}context[0]
+            final fun <get-context>(): #A1 // actron.statechart.machine/EntryOutput.Transition.context.<get-context>|<get-context>(){}[0]
+
+        final fun component1(): #A1 // actron.statechart.machine/EntryOutput.Transition.component1|component1(){}[0]
+        final fun copy(#A1 = ...): actron.statechart.machine/EntryOutput.Transition<#A1> // actron.statechart.machine/EntryOutput.Transition.copy|copy(1:0){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart.machine/EntryOutput.Transition.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // actron.statechart.machine/EntryOutput.Transition.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // actron.statechart.machine/EntryOutput.Transition.toString|toString(){}[0]
+    }
+
+    final class <#A1: out actron.core/Action> Dispatch : actron.statechart.machine/EntryOutput<#A1> { // actron.statechart.machine/EntryOutput.Dispatch|null[0]
+        constructor <init>(#A1) // actron.statechart.machine/EntryOutput.Dispatch.<init>|<init>(1:0){}[0]
+
+        final val action // actron.statechart.machine/EntryOutput.Dispatch.action|{}action[0]
+            final fun <get-action>(): #A1 // actron.statechart.machine/EntryOutput.Dispatch.action.<get-action>|<get-action>(){}[0]
+
+        final fun component1(): #A1 // actron.statechart.machine/EntryOutput.Dispatch.component1|component1(){}[0]
+        final fun copy(#A1 = ...): actron.statechart.machine/EntryOutput.Dispatch<#A1> // actron.statechart.machine/EntryOutput.Dispatch.copy|copy(1:0){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart.machine/EntryOutput.Dispatch.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // actron.statechart.machine/EntryOutput.Dispatch.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // actron.statechart.machine/EntryOutput.Dispatch.toString|toString(){}[0]
+    }
+
+    final object Completed : actron.statechart.machine/EntryOutput<kotlin/Nothing> { // actron.statechart.machine/EntryOutput.Completed|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart.machine/EntryOutput.Completed.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // actron.statechart.machine/EntryOutput.Completed.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // actron.statechart.machine/EntryOutput.Completed.toString|toString(){}[0]
+    }
+}
+
 sealed interface <#A: out actron.core/Action> actron.statechart.machine/MachineInput : actron.core/Action { // actron.statechart.machine/MachineInput|null[0]
     abstract val now // actron.statechart.machine/MachineInput.now|{}now[0]
         abstract fun <get-now>(): actron.statechart.machine/MachineTime // actron.statechart.machine/MachineInput.now.<get-now>|<get-now>(){}[0]
@@ -430,6 +477,25 @@ sealed interface <#A: out actron.core/Action> actron.statechart.machine/MachineI
         final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart.machine/MachineInput.Dispatch.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // actron.statechart.machine/MachineInput.Dispatch.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // actron.statechart.machine/MachineInput.Dispatch.toString|toString(){}[0]
+    }
+
+    final class <#A1: out actron.core/Action> EntryResult : actron.statechart.machine/MachineInput<#A1> { // actron.statechart.machine/MachineInput.EntryResult|null[0]
+        constructor <init>(actron.statechart.machine/ActivationId, actron.statechart.machine/EntryOutput<#A1>, actron.statechart.machine/MachineTime) // actron.statechart.machine/MachineInput.EntryResult.<init>|<init>(actron.statechart.machine.ActivationId;actron.statechart.machine.EntryOutput<1:0>;actron.statechart.machine.MachineTime){}[0]
+
+        final val activation // actron.statechart.machine/MachineInput.EntryResult.activation|{}activation[0]
+            final fun <get-activation>(): actron.statechart.machine/ActivationId // actron.statechart.machine/MachineInput.EntryResult.activation.<get-activation>|<get-activation>(){}[0]
+        final val now // actron.statechart.machine/MachineInput.EntryResult.now|{}now[0]
+            final fun <get-now>(): actron.statechart.machine/MachineTime // actron.statechart.machine/MachineInput.EntryResult.now.<get-now>|<get-now>(){}[0]
+        final val output // actron.statechart.machine/MachineInput.EntryResult.output|{}output[0]
+            final fun <get-output>(): actron.statechart.machine/EntryOutput<#A1> // actron.statechart.machine/MachineInput.EntryResult.output.<get-output>|<get-output>(){}[0]
+
+        final fun component1(): actron.statechart.machine/ActivationId // actron.statechart.machine/MachineInput.EntryResult.component1|component1(){}[0]
+        final fun component2(): actron.statechart.machine/EntryOutput<#A1> // actron.statechart.machine/MachineInput.EntryResult.component2|component2(){}[0]
+        final fun component3(): actron.statechart.machine/MachineTime // actron.statechart.machine/MachineInput.EntryResult.component3|component3(){}[0]
+        final fun copy(actron.statechart.machine/ActivationId = ..., actron.statechart.machine/EntryOutput<#A1> = ..., actron.statechart.machine/MachineTime = ...): actron.statechart.machine/MachineInput.EntryResult<#A1> // actron.statechart.machine/MachineInput.EntryResult.copy|copy(actron.statechart.machine.ActivationId;actron.statechart.machine.EntryOutput<1:0>;actron.statechart.machine.MachineTime){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart.machine/MachineInput.EntryResult.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // actron.statechart.machine/MachineInput.EntryResult.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // actron.statechart.machine/MachineInput.EntryResult.toString|toString(){}[0]
     }
 
     final class <#A1: out actron.core/Action> External : actron.statechart.machine/MachineInput<#A1> { // actron.statechart.machine/MachineInput.External|null[0]
@@ -2009,6 +2075,25 @@ final class <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.
 
 final class <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event, #E: kotlin/Any, #F: actron.core/Action, #G: kotlin/Any, #H: actron.core/Event> actron.statechart.machine/TypedInvocation // actron.statechart.machine/TypedInvocation|null[0]
 
+final class <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event> actron.statechart.machine/BehaviorEntryScope { // actron.statechart.machine/BehaviorEntryScope|null[0]
+    final val now // actron.statechart.machine/BehaviorEntryScope.now|{}now[0]
+        final fun <get-now>(): actron.statechart.machine/MachineTime // actron.statechart.machine/BehaviorEntryScope.now.<get-now>|<get-now>(){}[0]
+    final val state // actron.statechart.machine/BehaviorEntryScope.state|{}state[0]
+        final fun <get-state>(): #A // actron.statechart.machine/BehaviorEntryScope.state.<get-state>|<get-state>(){}[0]
+
+    final suspend fun command(#C) // actron.statechart.machine/BehaviorEntryScope.command|command(1:2){}[0]
+    final suspend fun event(#D) // actron.statechart.machine/BehaviorEntryScope.event|event(1:3){}[0]
+    final suspend fun transitionTo(#A) // actron.statechart.machine/BehaviorEntryScope.transitionTo|transitionTo(1:0){}[0]
+}
+
+final class <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event> actron.statechart.machine/BehaviorStateBuilder { // actron.statechart.machine/BehaviorStateBuilder|null[0]
+    constructor <init>(actron.statechart/StateId, actron.statechart.machine/MachineBuilder<#A, #B, #C, #D>, kotlin/Function1<#A, actron.statechart/StateId>) // actron.statechart.machine/BehaviorStateBuilder.<init>|<init>(actron.statechart.StateId;actron.statechart.machine.MachineBuilder<1:0,1:1,1:2,1:3>;kotlin.Function1<1:0,actron.statechart.StateId>){}[0]
+
+    final fun onEnter(kotlin.coroutines/SuspendFunction1<actron.statechart.machine/BehaviorEntryScope<#A, #B, #C, #D>, kotlin/Unit>) // actron.statechart.machine/BehaviorStateBuilder.onEnter|onEnter(kotlin.coroutines.SuspendFunction1<actron.statechart.machine.BehaviorEntryScope<1:0,1:1,1:2,1:3>,kotlin.Unit>){}[0]
+    final fun register(actron.statechart/ActionMatcher, kotlin/Function2<actron.statechart.machine/BehaviorActionScope<#A, #D>, actron.core/Action, kotlin/Unit>) // actron.statechart.machine/BehaviorStateBuilder.register|register(actron.statechart.ActionMatcher;kotlin.Function2<actron.statechart.machine.BehaviorActionScope<1:0,1:3>,actron.core.Action,kotlin.Unit>){}[0]
+    final inline fun <#A1: reified #B> on(noinline kotlin/Function2<actron.statechart.machine/BehaviorActionScope<#A, #D>, #A1, kotlin/Unit>) // actron.statechart.machine/BehaviorStateBuilder.on|on(kotlin.Function2<actron.statechart.machine.BehaviorActionScope<1:0,1:3>,0:0,kotlin.Unit>){0§<1:1>}[0]
+}
+
 final class <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event> actron.statechart.machine/CausalityTracker : actron.statechart.machine/DecisionObserver<#A, #B, #C, #D> { // actron.statechart.machine/CausalityTracker|null[0]
     constructor <init>(actron.observability/StoreInstanceId, kotlin/Int = ...) // actron.statechart.machine/CausalityTracker.<init>|<init>(actron.observability.StoreInstanceId;kotlin.Int){}[0]
 
@@ -2107,6 +2192,21 @@ final class <#A: kotlin/Any, #B: actron.core/Action> actron.statechart.machine/C
 
     final fun register(kotlin/Function1<#A, kotlin/Boolean>, actron.statechart.machine/CommandHandler<#A, #B>) // actron.statechart.machine/CommandHandlersBuilder.register|register(kotlin.Function1<1:0,kotlin.Boolean>;actron.statechart.machine.CommandHandler<1:0,1:1>){}[0]
     final inline fun <#A1: reified #A> handle(noinline kotlin/Function2<#A1, kotlin/Exception, #B>, noinline kotlin.coroutines/SuspendFunction1<#A1, #B>) // actron.statechart.machine/CommandHandlersBuilder.handle|handle(kotlin.Function2<0:0,kotlin.Exception,1:1>;kotlin.coroutines.SuspendFunction1<0:0,1:1>){0§<1:0>}[0]
+}
+
+final class <#A: kotlin/Any, #B: actron.core/Event> actron.statechart.machine/BehaviorActionScope { // actron.statechart.machine/BehaviorActionScope|null[0]
+    final val now // actron.statechart.machine/BehaviorActionScope.now|{}now[0]
+        final fun <get-now>(): actron.statechart.machine/MachineTime // actron.statechart.machine/BehaviorActionScope.now.<get-now>|<get-now>(){}[0]
+    final val state // actron.statechart.machine/BehaviorActionScope.state|{}state[0]
+        final fun <get-state>(): #A // actron.statechart.machine/BehaviorActionScope.state.<get-state>|<get-state>(){}[0]
+
+    final fun event(#B) // actron.statechart.machine/BehaviorActionScope.event|event(1:1){}[0]
+    final fun transitionTo(#A) // actron.statechart.machine/BehaviorActionScope.transitionTo|transitionTo(1:0){}[0]
+}
+
+final class <#A: kotlin/Any, #B: kotlin/Any, #C: actron.core/Action, #D: kotlin/Any, #E: actron.core/Event> actron.statechart.machine/BehaviorMachineBuilder { // actron.statechart.machine/BehaviorMachineBuilder|null[0]
+    final fun register(kotlin.reflect/KClass<out #B>, kotlin/Function1<actron.statechart.machine/BehaviorStateBuilder<#A, #C, #D, #E>, kotlin/Unit>) // actron.statechart.machine/BehaviorMachineBuilder.register|register(kotlin.reflect.KClass<out|1:1>;kotlin.Function1<actron.statechart.machine.BehaviorStateBuilder<1:0,1:2,1:3,1:4>,kotlin.Unit>){}[0]
+    final inline fun <#A1: reified #B> state(noinline kotlin/Function1<actron.statechart.machine/BehaviorStateBuilder<#A, #C, #D, #E>, kotlin/Unit> = ...) // actron.statechart.machine/BehaviorMachineBuilder.state|state(kotlin.Function1<actron.statechart.machine.BehaviorStateBuilder<1:0,1:2,1:3,1:4>,kotlin.Unit>){0§<1:1>}[0]
 }
 
 final class <#A: kotlin/Any, #B: kotlin/Any, #C: actron.core/Action, #D: kotlin/Any, #E: actron.core/Event> actron.statechart.machine/TypedCompoundMachineBuilder : actron.statechart.machine/TypedStateMachineBuilder<#A, #B, #C, #D, #E> { // actron.statechart.machine/TypedCompoundMachineBuilder|null[0]
@@ -2508,7 +2608,7 @@ final class <#A: kotlin/Any> actron.statechart.machine/MachineInvariant { // act
 }
 
 final class <#A: kotlin/Any> actron.statechart.machine/MachineSnapshot : actron.core/State { // actron.statechart.machine/MachineSnapshot|null[0]
-    constructor <init>(actron.statechart.machine/DefinitionId, actron.statechart.machine/DefinitionVersion, kotlin/Long, actron.statechart/StateConfiguration, #A, kotlin.collections/Map<actron.statechart/StateId, actron.statechart.machine/ActivationId> = ..., kotlin.collections/Map<actron.statechart.machine/CommandId, actron.statechart.machine/CommandRecord> = ..., kotlin.collections/Map<actron.statechart.machine/TimerId, actron.statechart.machine/TimerRecord> = ..., actron.statechart.machine/MachineCounters = ...) // actron.statechart.machine/MachineSnapshot.<init>|<init>(actron.statechart.machine.DefinitionId;actron.statechart.machine.DefinitionVersion;kotlin.Long;actron.statechart.StateConfiguration;1:0;kotlin.collections.Map<actron.statechart.StateId,actron.statechart.machine.ActivationId>;kotlin.collections.Map<actron.statechart.machine.CommandId,actron.statechart.machine.CommandRecord>;kotlin.collections.Map<actron.statechart.machine.TimerId,actron.statechart.machine.TimerRecord>;actron.statechart.machine.MachineCounters){}[0]
+    constructor <init>(actron.statechart.machine/DefinitionId, actron.statechart.machine/DefinitionVersion, kotlin/Long, actron.statechart/StateConfiguration, #A, kotlin.collections/Map<actron.statechart/StateId, actron.statechart.machine/ActivationId> = ..., kotlin.collections/Map<actron.statechart.machine/CommandId, actron.statechart.machine/CommandRecord> = ..., kotlin.collections/Map<actron.statechart.machine/TimerId, actron.statechart.machine/TimerRecord> = ..., actron.statechart.machine/MachineCounters = ..., kotlin.collections/Map<actron.statechart/StateId, actron.statechart.machine/EntryRecord> = ...) // actron.statechart.machine/MachineSnapshot.<init>|<init>(actron.statechart.machine.DefinitionId;actron.statechart.machine.DefinitionVersion;kotlin.Long;actron.statechart.StateConfiguration;1:0;kotlin.collections.Map<actron.statechart.StateId,actron.statechart.machine.ActivationId>;kotlin.collections.Map<actron.statechart.machine.CommandId,actron.statechart.machine.CommandRecord>;kotlin.collections.Map<actron.statechart.machine.TimerId,actron.statechart.machine.TimerRecord>;actron.statechart.machine.MachineCounters;kotlin.collections.Map<actron.statechart.StateId,actron.statechart.machine.EntryRecord>){}[0]
 
     final val activations // actron.statechart.machine/MachineSnapshot.activations|{}activations[0]
         final fun <get-activations>(): kotlin.collections/Map<actron.statechart/StateId, actron.statechart.machine/ActivationId> // actron.statechart.machine/MachineSnapshot.activations.<get-activations>|<get-activations>(){}[0]
@@ -2524,6 +2624,8 @@ final class <#A: kotlin/Any> actron.statechart.machine/MachineSnapshot : actron.
         final fun <get-definition>(): actron.statechart.machine/DefinitionId // actron.statechart.machine/MachineSnapshot.definition.<get-definition>|<get-definition>(){}[0]
     final val isStarted // actron.statechart.machine/MachineSnapshot.isStarted|{}isStarted[0]
         final fun <get-isStarted>(): kotlin/Boolean // actron.statechart.machine/MachineSnapshot.isStarted.<get-isStarted>|<get-isStarted>(){}[0]
+    final val pendingEntries // actron.statechart.machine/MachineSnapshot.pendingEntries|{}pendingEntries[0]
+        final fun <get-pendingEntries>(): kotlin.collections/Map<actron.statechart/StateId, actron.statechart.machine/EntryRecord> // actron.statechart.machine/MachineSnapshot.pendingEntries.<get-pendingEntries>|<get-pendingEntries>(){}[0]
     final val revision // actron.statechart.machine/MachineSnapshot.revision|{}revision[0]
         final fun <get-revision>(): kotlin/Long // actron.statechart.machine/MachineSnapshot.revision.<get-revision>|<get-revision>(){}[0]
     final val timers // actron.statechart.machine/MachineSnapshot.timers|{}timers[0]
@@ -2533,6 +2635,7 @@ final class <#A: kotlin/Any> actron.statechart.machine/MachineSnapshot : actron.
 
     final fun activeLeaves(actron.statechart/StateChartDefinition): kotlin.collections/List<actron.statechart/StateId> // actron.statechart.machine/MachineSnapshot.activeLeaves|activeLeaves(actron.statechart.StateChartDefinition){}[0]
     final fun component1(): actron.statechart.machine/DefinitionId // actron.statechart.machine/MachineSnapshot.component1|component1(){}[0]
+    final fun component10(): kotlin.collections/Map<actron.statechart/StateId, actron.statechart.machine/EntryRecord> // actron.statechart.machine/MachineSnapshot.component10|component10(){}[0]
     final fun component2(): actron.statechart.machine/DefinitionVersion // actron.statechart.machine/MachineSnapshot.component2|component2(){}[0]
     final fun component3(): kotlin/Long // actron.statechart.machine/MachineSnapshot.component3|component3(){}[0]
     final fun component4(): actron.statechart/StateConfiguration // actron.statechart.machine/MachineSnapshot.component4|component4(){}[0]
@@ -2541,7 +2644,7 @@ final class <#A: kotlin/Any> actron.statechart.machine/MachineSnapshot : actron.
     final fun component7(): kotlin.collections/Map<actron.statechart.machine/CommandId, actron.statechart.machine/CommandRecord> // actron.statechart.machine/MachineSnapshot.component7|component7(){}[0]
     final fun component8(): kotlin.collections/Map<actron.statechart.machine/TimerId, actron.statechart.machine/TimerRecord> // actron.statechart.machine/MachineSnapshot.component8|component8(){}[0]
     final fun component9(): actron.statechart.machine/MachineCounters // actron.statechart.machine/MachineSnapshot.component9|component9(){}[0]
-    final fun copy(actron.statechart.machine/DefinitionId = ..., actron.statechart.machine/DefinitionVersion = ..., kotlin/Long = ..., actron.statechart/StateConfiguration = ..., #A = ..., kotlin.collections/Map<actron.statechart/StateId, actron.statechart.machine/ActivationId> = ..., kotlin.collections/Map<actron.statechart.machine/CommandId, actron.statechart.machine/CommandRecord> = ..., kotlin.collections/Map<actron.statechart.machine/TimerId, actron.statechart.machine/TimerRecord> = ..., actron.statechart.machine/MachineCounters = ...): actron.statechart.machine/MachineSnapshot<#A> // actron.statechart.machine/MachineSnapshot.copy|copy(actron.statechart.machine.DefinitionId;actron.statechart.machine.DefinitionVersion;kotlin.Long;actron.statechart.StateConfiguration;1:0;kotlin.collections.Map<actron.statechart.StateId,actron.statechart.machine.ActivationId>;kotlin.collections.Map<actron.statechart.machine.CommandId,actron.statechart.machine.CommandRecord>;kotlin.collections.Map<actron.statechart.machine.TimerId,actron.statechart.machine.TimerRecord>;actron.statechart.machine.MachineCounters){}[0]
+    final fun copy(actron.statechart.machine/DefinitionId = ..., actron.statechart.machine/DefinitionVersion = ..., kotlin/Long = ..., actron.statechart/StateConfiguration = ..., #A = ..., kotlin.collections/Map<actron.statechart/StateId, actron.statechart.machine/ActivationId> = ..., kotlin.collections/Map<actron.statechart.machine/CommandId, actron.statechart.machine/CommandRecord> = ..., kotlin.collections/Map<actron.statechart.machine/TimerId, actron.statechart.machine/TimerRecord> = ..., actron.statechart.machine/MachineCounters = ..., kotlin.collections/Map<actron.statechart/StateId, actron.statechart.machine/EntryRecord> = ...): actron.statechart.machine/MachineSnapshot<#A> // actron.statechart.machine/MachineSnapshot.copy|copy(actron.statechart.machine.DefinitionId;actron.statechart.machine.DefinitionVersion;kotlin.Long;actron.statechart.StateConfiguration;1:0;kotlin.collections.Map<actron.statechart.StateId,actron.statechart.machine.ActivationId>;kotlin.collections.Map<actron.statechart.machine.CommandId,actron.statechart.machine.CommandRecord>;kotlin.collections.Map<actron.statechart.machine.TimerId,actron.statechart.machine.TimerRecord>;actron.statechart.machine.MachineCounters;kotlin.collections.Map<actron.statechart.StateId,actron.statechart.machine.EntryRecord>){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart.machine/MachineSnapshot.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // actron.statechart.machine/MachineSnapshot.hashCode|hashCode(){}[0]
     final fun isActive(actron.statechart/StateId): kotlin/Boolean // actron.statechart.machine/MachineSnapshot.isActive|isActive(actron.statechart.StateId){}[0]
@@ -2893,6 +2996,22 @@ final class actron.statechart.machine/DurationProfile { // actron.statechart.mac
     final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart.machine/DurationProfile.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // actron.statechart.machine/DurationProfile.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // actron.statechart.machine/DurationProfile.toString|toString(){}[0]
+}
+
+final class actron.statechart.machine/EntryRecord { // actron.statechart.machine/EntryRecord|null[0]
+    constructor <init>(actron.statechart.machine/ActivationId, actron.statechart.machine/CommandId) // actron.statechart.machine/EntryRecord.<init>|<init>(actron.statechart.machine.ActivationId;actron.statechart.machine.CommandId){}[0]
+
+    final val activation // actron.statechart.machine/EntryRecord.activation|{}activation[0]
+        final fun <get-activation>(): actron.statechart.machine/ActivationId // actron.statechart.machine/EntryRecord.activation.<get-activation>|<get-activation>(){}[0]
+    final val command // actron.statechart.machine/EntryRecord.command|{}command[0]
+        final fun <get-command>(): actron.statechart.machine/CommandId // actron.statechart.machine/EntryRecord.command.<get-command>|<get-command>(){}[0]
+
+    final fun component1(): actron.statechart.machine/ActivationId // actron.statechart.machine/EntryRecord.component1|component1(){}[0]
+    final fun component2(): actron.statechart.machine/CommandId // actron.statechart.machine/EntryRecord.component2|component2(){}[0]
+    final fun copy(actron.statechart.machine/ActivationId = ..., actron.statechart.machine/CommandId = ...): actron.statechart.machine/EntryRecord // actron.statechart.machine/EntryRecord.copy|copy(actron.statechart.machine.ActivationId;actron.statechart.machine.CommandId){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart.machine/EntryRecord.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // actron.statechart.machine/EntryRecord.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // actron.statechart.machine/EntryRecord.toString|toString(){}[0]
 }
 
 final class actron.statechart.machine/GroupCheckpoint { // actron.statechart.machine/GroupCheckpoint|null[0]
@@ -4058,6 +4177,7 @@ final fun <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.co
 final fun <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event> (actron.statechart.machine/MachineConfiguration<#A, #B, #D>).actron.statechart.machine/profileWith(actron.statechart.machine/MachineProfiler<#A, #B, #C, #D>) // actron.statechart.machine/profileWith|profileWith@actron.statechart.machine.MachineConfiguration<0:0,0:1,0:3>(actron.statechart.machine.MachineProfiler<0:0,0:1,0:2,0:3>){0§<kotlin.Any>;1§<actron.core.Action>;2§<kotlin.Any>;3§<actron.core.Event>}[0]
 final fun <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event> actron.statechart.machine/Machine(actron.statechart.machine/DefinitionId, actron.statechart.machine/DefinitionVersion, actron.statechart/StateChartDefinition, kotlin/Function1<actron.statechart.machine/MachineBuilder<#A, #B, #C, #D>, kotlin/Unit> = ...): actron.statechart.machine/Machine<#A, #B, #C, #D> // actron.statechart.machine/Machine|Machine(actron.statechart.machine.DefinitionId;actron.statechart.machine.DefinitionVersion;actron.statechart.StateChartDefinition;kotlin.Function1<actron.statechart.machine.MachineBuilder<0:0,0:1,0:2,0:3>,kotlin.Unit>){0§<kotlin.Any>;1§<actron.core.Action>;2§<kotlin.Any>;3§<actron.core.Event>}[0]
 final fun <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event> actron.statechart.machine/MachineStore(actron.statechart.machine/Machine<#A, #B, #C, #D>, #A, actron.statechart.machine/CommandHandler<#C, #B>, kotlinx.coroutines/CoroutineScope, actron.statechart.machine/MachineClock = ..., kotlin.coroutines/CoroutineContext = ..., actron.statechart.machine/AdmissionPolicy = ..., kotlin.collections/List<actron.statechart.machine/DecisionObserver<#A, #B, #C, #D>> = ..., actron.statechart.machine/MailboxConfig<#D> = ..., kotlin/Function1<actron.statechart.machine/MachineConfiguration<#A, #B, #D>, kotlin/Unit> = ...): actron.statechart.machine/MachineStore<#A, #B, #C, #D> // actron.statechart.machine/MachineStore|MachineStore(actron.statechart.machine.Machine<0:0,0:1,0:2,0:3>;0:0;actron.statechart.machine.CommandHandler<0:2,0:1>;kotlinx.coroutines.CoroutineScope;actron.statechart.machine.MachineClock;kotlin.coroutines.CoroutineContext;actron.statechart.machine.AdmissionPolicy;kotlin.collections.List<actron.statechart.machine.DecisionObserver<0:0,0:1,0:2,0:3>>;actron.statechart.machine.MailboxConfig<0:3>;kotlin.Function1<actron.statechart.machine.MachineConfiguration<0:0,0:1,0:3>,kotlin.Unit>){0§<kotlin.Any>;1§<actron.core.Action>;2§<kotlin.Any>;3§<actron.core.Event>}[0]
+final fun <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event> actron.statechart.machine/behaviorStateMachine(actron.statechart.machine/DefinitionId, actron.statechart.machine/DefinitionVersion, #A, kotlin/Function1<actron.statechart.machine/BehaviorMachineBuilder<#A, #A, #B, #C, #D>, kotlin/Unit>): actron.statechart.machine/Machine<#A, #B, #C, #D> // actron.statechart.machine/behaviorStateMachine|behaviorStateMachine(actron.statechart.machine.DefinitionId;actron.statechart.machine.DefinitionVersion;0:0;kotlin.Function1<actron.statechart.machine.BehaviorMachineBuilder<0:0,0:0,0:1,0:2,0:3>,kotlin.Unit>){0§<kotlin.Any>;1§<actron.core.Action>;2§<kotlin.Any>;3§<actron.core.Event>}[0]
 final fun <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event> actron.statechart.machine/decisionDiagnostics(kotlin/Function2<actron.core/InputAttribution, actron.statechart.machine/DecisionExplanation, kotlin/Unit>): actron.statechart.machine/DecisionObserver<#A, #B, #C, #D> // actron.statechart.machine/decisionDiagnostics|decisionDiagnostics(kotlin.Function2<actron.core.InputAttribution,actron.statechart.machine.DecisionExplanation,kotlin.Unit>){0§<kotlin.Any>;1§<actron.core.Action>;2§<kotlin.Any>;3§<actron.core.Event>}[0]
 final fun <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event> actron.statechart.machine/parallelStateMachine(actron.statechart.machine/DefinitionId, actron.statechart.machine/DefinitionVersion, kotlin/Function1<actron.statechart.machine/ParallelStateMachineBuilder<#A, #B, #C, #D>, kotlin/Unit>): actron.statechart.machine/Machine<#A, #B, #C, #D> // actron.statechart.machine/parallelStateMachine|parallelStateMachine(actron.statechart.machine.DefinitionId;actron.statechart.machine.DefinitionVersion;kotlin.Function1<actron.statechart.machine.ParallelStateMachineBuilder<0:0,0:1,0:2,0:3>,kotlin.Unit>){0§<kotlin.Any>;1§<actron.core.Action>;2§<kotlin.Any>;3§<actron.core.Event>}[0]
 final fun <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.core/Event> actron.statechart.machine/resumeMachineStore(actron.statechart.machine/Machine<#A, #B, #C, #D>, actron.statechart.machine/ExecutorCheckpoint<#A, #C>, actron.statechart.machine/CommandHandler<#C, #B>, kotlinx.coroutines/CoroutineScope, kotlin.coroutines/CoroutineContext = ..., actron.statechart.machine/MachineClock = ..., kotlin.collections/List<actron.statechart.machine/DecisionObserver<#A, #B, #C, #D>> = ..., actron.statechart.machine/CommandRecoveryStrategy<#C, #B> = ..., actron.statechart.machine/AdmissionPolicy = ..., actron.statechart.machine/MailboxConfig<#D> = ..., kotlin/Function1<actron.statechart.machine/MachineConfiguration<#A, #B, #D>, kotlin/Unit> = ...): actron.statechart.machine/MachineStore<#A, #B, #C, #D> // actron.statechart.machine/resumeMachineStore|resumeMachineStore(actron.statechart.machine.Machine<0:0,0:1,0:2,0:3>;actron.statechart.machine.ExecutorCheckpoint<0:0,0:2>;actron.statechart.machine.CommandHandler<0:2,0:1>;kotlinx.coroutines.CoroutineScope;kotlin.coroutines.CoroutineContext;actron.statechart.machine.MachineClock;kotlin.collections.List<actron.statechart.machine.DecisionObserver<0:0,0:1,0:2,0:3>>;actron.statechart.machine.CommandRecoveryStrategy<0:2,0:1>;actron.statechart.machine.AdmissionPolicy;actron.statechart.machine.MailboxConfig<0:3>;kotlin.Function1<actron.statechart.machine.MachineConfiguration<0:0,0:1,0:3>,kotlin.Unit>){0§<kotlin.Any>;1§<actron.core.Action>;2§<kotlin.Any>;3§<actron.core.Event>}[0]
@@ -4067,6 +4187,7 @@ final fun <#A: kotlin/Any, #B: actron.core/Action> actron.statechart.machine/com
 final fun <#A: kotlin/Any, #B: actron.core/Action> actron.statechart.machine/commandHandlers(kotlin/Function1<actron.statechart.machine/CommandHandlersBuilder<#A, #B>, kotlin/Unit>): actron.statechart.machine/CommandHandler<#A, #B> // actron.statechart.machine/commandHandlers|commandHandlers(kotlin.Function1<actron.statechart.machine.CommandHandlersBuilder<0:0,0:1>,kotlin.Unit>){0§<kotlin.Any>;1§<actron.core.Action>}[0]
 final fun <#A: kotlin/Any, #B: kotlin/Any, #C: actron.core/Action, #D: kotlin/Any, #E: actron.core/Event, #F: kotlin/Any, #G: actron.core/Action, #H: kotlin/Any, #I: actron.core/Event> actron.statechart.machine/typedInvokedMachine(actron.statechart.machine/DefinitionId, actron.statechart.machine/DefinitionVersion, #B, kotlin/Function1<#A, #B>, kotlin/Function2<#A, #B, #A>, actron.statechart.machine/Machine<#F, #G, #H, #I>, kotlin/Int = ..., kotlin/Function2<actron.statechart.machine/TypedStateMachineBuilder<#A, #B, #C, #D, #E>, actron.statechart.machine/TypedInvocation<#A, #C, #D, #E, #F, #G, #H, #I>, kotlin/Unit>): actron.statechart.machine/InvokedMachine<#A, #C, #D, #E, #F, #G, #H, #I> // actron.statechart.machine/typedInvokedMachine|typedInvokedMachine(actron.statechart.machine.DefinitionId;actron.statechart.machine.DefinitionVersion;0:1;kotlin.Function1<0:0,0:1>;kotlin.Function2<0:0,0:1,0:0>;actron.statechart.machine.Machine<0:5,0:6,0:7,0:8>;kotlin.Int;kotlin.Function2<actron.statechart.machine.TypedStateMachineBuilder<0:0,0:1,0:2,0:3,0:4>,actron.statechart.machine.TypedInvocation<0:0,0:2,0:3,0:4,0:5,0:6,0:7,0:8>,kotlin.Unit>){0§<kotlin.Any>;1§<kotlin.Any>;2§<actron.core.Action>;3§<kotlin.Any>;4§<actron.core.Event>;5§<kotlin.Any>;6§<actron.core.Action>;7§<kotlin.Any>;8§<actron.core.Event>}[0]
 final fun <#A: kotlin/Any, #B: kotlin/Any, #C: actron.core/Action, #D: kotlin/Any, #E: actron.core/Event> (actron.statechart.machine/Machine<#B, #C, #D, #E>).actron.statechart.machine/migrateSnapshot(actron.statechart.machine/MachineSnapshot<#A>, actron.statechart.machine/SnapshotMigration<#A, #B>): actron.statechart.machine/MachineSnapshot<#B> // actron.statechart.machine/migrateSnapshot|migrateSnapshot@actron.statechart.machine.Machine<0:1,0:2,0:3,0:4>(actron.statechart.machine.MachineSnapshot<0:0>;actron.statechart.machine.SnapshotMigration<0:0,0:1>){0§<kotlin.Any>;1§<kotlin.Any>;2§<actron.core.Action>;3§<kotlin.Any>;4§<actron.core.Event>}[0]
+final fun <#A: kotlin/Any, #B: kotlin/Any, #C: actron.core/Action, #D: kotlin/Any, #E: actron.core/Event> actron.statechart.machine/behaviorStateMachine(actron.statechart.machine/DefinitionId, actron.statechart.machine/DefinitionVersion, #B, kotlin/Function1<#A, #B>, kotlin/Function1<actron.statechart.machine/BehaviorMachineBuilder<#A, #B, #C, #D, #E>, kotlin/Unit>): actron.statechart.machine/Machine<#A, #C, #D, #E> // actron.statechart.machine/behaviorStateMachine|behaviorStateMachine(actron.statechart.machine.DefinitionId;actron.statechart.machine.DefinitionVersion;0:1;kotlin.Function1<0:0,0:1>;kotlin.Function1<actron.statechart.machine.BehaviorMachineBuilder<0:0,0:1,0:2,0:3,0:4>,kotlin.Unit>){0§<kotlin.Any>;1§<kotlin.Any>;2§<actron.core.Action>;3§<kotlin.Any>;4§<actron.core.Event>}[0]
 final fun <#A: kotlin/Any, #B: kotlin/Any, #C: actron.core/Action, #D: kotlin/Any, #E: actron.core/Event> actron.statechart.machine/typedStateMachine(actron.statechart.machine/DefinitionId, actron.statechart.machine/DefinitionVersion, #B, kotlin/Function1<#A, #B>, kotlin/Function2<#A, #B, #A>, kotlin/Function1<actron.statechart.machine/TypedStateMachineBuilder<#A, #B, #C, #D, #E>, kotlin/Unit>): actron.statechart.machine/Machine<#A, #C, #D, #E> // actron.statechart.machine/typedStateMachine|typedStateMachine(actron.statechart.machine.DefinitionId;actron.statechart.machine.DefinitionVersion;0:1;kotlin.Function1<0:0,0:1>;kotlin.Function2<0:0,0:1,0:0>;kotlin.Function1<actron.statechart.machine.TypedStateMachineBuilder<0:0,0:1,0:2,0:3,0:4>,kotlin.Unit>){0§<kotlin.Any>;1§<kotlin.Any>;2§<actron.core.Action>;3§<kotlin.Any>;4§<actron.core.Event>}[0]
 final fun <#A: kotlin/Any, #B: kotlin/Any> (actron.statechart.machine/DurableCheckpoint<#A, #B>).actron.statechart.machine/recoveryContract(): actron.statechart.machine/RecoveryContract // actron.statechart.machine/recoveryContract|recoveryContract@actron.statechart.machine.DurableCheckpoint<0:0,0:1>(){0§<kotlin.Any>;1§<kotlin.Any>}[0]
 final fun <#A: kotlin/Any, #B: kotlin/Any> (actron.statechart.machine/ExecutorCheckpoint<#A, #B>).actron.statechart.machine/recoveryContract(): actron.statechart.machine/RecoveryContract // actron.statechart.machine/recoveryContract|recoveryContract@actron.statechart.machine.ExecutorCheckpoint<0:0,0:1>(){0§<kotlin.Any>;1§<kotlin.Any>}[0]

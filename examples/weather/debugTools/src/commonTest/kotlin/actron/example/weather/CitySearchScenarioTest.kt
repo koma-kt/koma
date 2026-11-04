@@ -49,12 +49,12 @@ class CitySearchScenarioTest {
                     dispatch(CitySearchAction.ChangeQuery("Lo"))
                     advanceTimeBy(350.milliseconds)
                     advanceTimeBy(8.seconds)
-                    expectState<RequestState.Error> { it.phase }
+                    assertEquals(RequestFailure.Timeout, expectState<RequestState.Error> { it.phase }.cause)
                     dispatch(CitySearchAction.ChangeQuery("Lon"))
                     advanceTimeBy(350.milliseconds)
                     dispatch(CitySearchAction.ChangeQuery(""))
                     expectState<RequestState.Idle> { it.phase }
                 }
-            assertTrue(report.timers.covered.isNotEmpty())
+            assertTrue(report.transitions.covered.isNotEmpty())
         }
 }

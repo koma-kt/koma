@@ -15,7 +15,7 @@ import actron.example.weather.feature.weather.domain.WeatherReading
 import actron.example.weather.feature.weather.presentation.CityWeatherScreen
 import actron.example.weather.feature.weather.presentation.WeatherContext
 import actron.example.weather.feature.weather.presentation.toUiState
-import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceState
+import actron.example.weather.feature.weatheradvice.presentation.WeatherAdvicePhase
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
@@ -29,7 +29,7 @@ class WeatherLocalizationTest {
         val weather =
             WeatherContext(
                 city = city,
-                advice = WeatherAdviceState.Visible(items = listOf(WeatherAdvice.Umbrella)),
+                advice = WeatherAdvicePhase.Visible(items = listOf(WeatherAdvice.Umbrella)),
                 current = RequestState.Success(value = WeatherReading(city = city, temperature = 18.0, feelsLike = 16.0, wind = 12.0, code = 0, time = "12:00")),
                 hourly = RequestState.Success(value = HourlyForecast(city = city, hours = listOf(ForecastHour(time = "12:00", temperature = 18.0, wind = 12.0, rainChance = 25)))),
             ).toUiState(enabled = true)

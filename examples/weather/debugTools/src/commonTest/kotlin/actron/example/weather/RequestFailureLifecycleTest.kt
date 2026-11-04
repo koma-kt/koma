@@ -7,8 +7,8 @@ import actron.example.weather.feature.cities.presentation.CitySearchAction
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.cities.presentation.CitySearchState
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastAction
-import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastContext
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
+import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastState
 import actron.example.weather.feature.weather.presentation.CityWeatherMachine
 import actron.statechart.test.test
 import kotlinx.coroutines.test.runTest
@@ -42,15 +42,15 @@ class RequestFailureLifecycleTest {
     @Test
     fun forecastTimeoutAndRequestFailureUseTheSameRetryableErrorState() =
         runTest(testBody = {
-            HourlyForecastMachine.create().test(scope = this, initial = HourlyForecastContext(city = demoCities.first()), scenario = {
+            HourlyForecastMachine.create().test(scope = this, initial = HourlyForecastState(city = demoCities.first()), scenario = {
                 dispatch(action = HourlyForecastAction.Refresh)
                 advanceTimeBy(duration = 8.seconds)
-                assertEquals(expected = RequestFailure.Timeout, actual = expectState<RequestState.Error>(select = { it.state }).cause)
+                assertEquals(expected = RequestFailure.Timeout, actual = expectState<RequestState.Error>(select = { it.phase }).cause)
                 dispatch(action = HourlyForecastAction.Retry)
                 completeCommand(result = { HourlyForecastAction.Failed(message = "offline") })
-                assertEquals(expected = RequestFailure.Unavailable(message = "offline"), actual = expectState<RequestState.Error>(select = { it.state }).cause)
+                assertEquals(expected = RequestFailure.Unavailable(message = "offline"), actual = expectState<RequestState.Error>(select = { it.phase }).cause)
                 dispatch(action = HourlyForecastAction.Refresh)
-                expectState<RequestState.Loading>(select = { it.state })
+                expectState<RequestState.Loading>(select = { it.phase })
                 advanceTimeBy(duration = 8.seconds)
             })
         })

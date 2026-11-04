@@ -93,6 +93,7 @@ internal fun MachineInput<*>.traceProvenance(): TraceProvenance =
 
 private fun MachineInput<*>.traceKind(): String =
     when (this) {
+        is MachineInput.EntryResult -> "entry-result"
         is MachineInput.Start -> "start"
         is MachineInput.Dispatch -> "dispatch"
         is MachineInput.BridgeReceived -> "bridge"

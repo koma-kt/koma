@@ -6,11 +6,11 @@ import actron.decompose.MachineDiagnostics
 import actron.decompose.MachineRecording
 import actron.example.weather.app.WeatherMachineRecordings
 import actron.example.weather.feature.cities.presentation.CitySearchState
-import actron.example.weather.feature.currentweather.presentation.CurrentWeatherContext
-import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastContext
+import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
+import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastState
 import actron.example.weather.feature.weather.presentation.WeatherContext
-import actron.example.weather.feature.weather.presentation.WeatherScreenContext
-import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceContext
+import actron.example.weather.feature.weather.presentation.WeatherScreenState
+import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceState
 import actron.timetravel.historyFields
 import kotlinx.serialization.json.Json
 
@@ -24,10 +24,10 @@ private fun describeWeatherContext(value: Any) =
     historyFields(
         when (value) {
             is CitySearchState -> Json.encodeToJsonElement(CitySearchState.serializer(), value)
-            is WeatherScreenContext -> Json.encodeToJsonElement(WeatherScreenContext.serializer(), value)
-            is CurrentWeatherContext -> Json.encodeToJsonElement(CurrentWeatherContext.serializer(), value)
-            is HourlyForecastContext -> Json.encodeToJsonElement(HourlyForecastContext.serializer(), value)
-            is WeatherAdviceContext -> Json.encodeToJsonElement(WeatherAdviceContext.serializer(), value)
+            is WeatherScreenState -> Json.encodeToJsonElement(WeatherScreenState.serializer(), value)
+            is CurrentWeatherState -> Json.encodeToJsonElement(CurrentWeatherState.serializer(), value)
+            is HourlyForecastState -> Json.encodeToJsonElement(HourlyForecastState.serializer(), value)
+            is WeatherAdviceState -> Json.encodeToJsonElement(WeatherAdviceState.serializer(), value)
             is WeatherContext -> Json.encodeToJsonElement(WeatherContext.serializer(), value)
             else -> error("Unknown Weather context")
         },

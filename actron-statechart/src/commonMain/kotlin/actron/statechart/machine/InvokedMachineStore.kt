@@ -155,7 +155,7 @@ private class InvocationStoreImpl<PC : Any, PA : Action, PCMD : Any, PE : Event,
     override val event: Flow<PE> get() = effects.transient
     override val mailbox: EffectMailbox<PE> get() = effects
     private var started = false
-    private val parent = InvocationSide(initial.parent.snapshot, initial.parent.lanes, parentHandler, parentRecovery, execution, clock, ::post, { input -> process(InvocationInput.Parent(input)) }, ::report)
+    private val parent = InvocationSide(initial.parent.snapshot, initial.parent.lanes, parentHandler, parentRecovery, execution, clock, ::post, { input -> process(InvocationInput.Parent(input)) }, ::report, machine.parent.activities)
     private var child: RunningChild<CC, CA, CCMD> =
         when (val saved = initial.child) {
             ChildCheckpoint.Dormant -> RunningChild.Dormant
@@ -290,7 +290,7 @@ private class InvocationStoreImpl<PC : Any, PA : Action, PCMD : Any, PE : Event,
         owner: ActivationId,
         snapshot: MachineSnapshot<CC>,
         lanes: Lanes<CCMD> = Lanes(),
-    ): InvocationSide<CC, CA, CCMD> = InvocationSide(snapshot, lanes, childHandler, childRecovery, execution, clock, ::post, { input -> process(InvocationInput.Child(owner, input)) }, ::report)
+    ): InvocationSide<CC, CA, CCMD> = InvocationSide(snapshot, lanes, childHandler, childRecovery, execution, clock, ::post, { input -> process(InvocationInput.Child(owner, input)) }, ::report, machine.child.activities)
 
     private fun process(input: InvocationInput<PA, CA>) {
         val decision = machine.decide(mutableState.value, input)
@@ -356,18 +356,21 @@ private class InvocationSide<C : Any, A : Action, CMD : Any>(
     private val post: (() -> Unit) -> Admission,
     private val decide: (MachineInput<A>) -> Unit,
     private val report: (Throwable) -> Unit,
+    activities: Map<actron.statechart.StateId, suspend (EntryExecution<C, A, CMD>) -> Unit>,
 ) {
     private val execution = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
     private val jobs = mutableMapOf<CommandId, Job>()
     private val timers = mutableMapOf<TimerId, Job>()
     private val ending = mutableMapOf<CommandId, CommandRegistration<CMD>>()
     private var closed = false
+    private val entries = EntryJobs(scope = execution, definitions = activities, handler = handler, clock = clock, feed = { input -> post { if (!closed) decide(input) } }, report = { error -> post { if (!closed) report(error) } })
 
     private fun feed(input: (MachineTime) -> MachineInput<A>) {
         post { if (!closed) decide(input(clock.now())) }
     }
 
     fun resume() {
+        entries.update(snapshot = snapshot)
         for (command in lanes.running.values) launch(command, recovering = true)
         scheduleTimers()
     }
@@ -389,6 +392,7 @@ private class InvocationSide<C : Any, A : Action, CMD : Any>(
         for (id in timers.keys.toList()) if (id !in next.timers) timers.remove(id)?.cancel()
         scheduleTimers()
         for (command in commands) change(lanes.admit(command))
+        entries.update(snapshot = snapshot)
     }
 
     private fun scheduleTimers() {

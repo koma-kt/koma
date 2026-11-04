@@ -6,20 +6,20 @@ import kotlinx.serialization.Serializable
 
 /** This child owns its request, interpreted advice and dismissal, independently of the other cards. */
 @Serializable
-sealed interface WeatherAdviceState {
-    @Serializable data object Ready : WeatherAdviceState
+sealed interface WeatherAdvicePhase {
+    @Serializable data object Ready : WeatherAdvicePhase
 
-    @Serializable data object Loading : WeatherAdviceState
+    @Serializable data object Loading : WeatherAdvicePhase
 
-    @Serializable data object Hidden : WeatherAdviceState
+    @Serializable data object Hidden : WeatherAdvicePhase
 
     @Serializable data class Visible(
         val items: List<WeatherAdvice>,
-    ) : WeatherAdviceState
+    ) : WeatherAdvicePhase
 
-    @Serializable data object Dismissed : WeatherAdviceState
+    @Serializable data object Dismissed : WeatherAdvicePhase
 
     @Serializable data class Error(
         val cause: RequestFailure,
-    ) : WeatherAdviceState
+    ) : WeatherAdvicePhase
 }

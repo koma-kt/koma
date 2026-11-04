@@ -56,7 +56,7 @@ class WeatherAppTest {
             onNodeWithTag("history-entry-1").performClick()
             onNodeWithTag("history-graph-tab").performClick()
             onNodeWithTag("machine-graph").assertContentDescriptionContains("Idle", substring = true)
-            onNodeWithTag("history-entry-2").performClick()
+            onNodeWithTag("history-entry-3").performClick()
             onNodeWithTag("machine-graph").assertContentDescriptionContains("Debouncing", substring = true)
             onNodeWithTag("history-live").performClick()
             onNodeWithTag("city-Lisbon").performClick()
@@ -206,6 +206,7 @@ class WeatherAppTest {
             onNodeWithTag("weather-back").performClick()
             onNodeWithTag("weather-screen").assertDoesNotExist()
             onNodeWithTag("city-search").performTextReplacement("")
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("city-search-hint").fetchSemanticsNodes().isNotEmpty() }
             onNodeWithTag("city-search-hint").assertIsDisplayed()
             onNodeWithTag("city-Lisbon").assertDoesNotExist()
             onNodeWithTag("city-search").performTextReplacement("Tokyo")

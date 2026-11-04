@@ -220,7 +220,8 @@ Selecting an event immediately renders the saved application frame with inputs d
 repositories. Live recording continues in the background. Switching to **Live** exits preview.
 **Continue here** replaces the Decompose stack and executors with the selected frame and exits preview. Search context and both independent weather machines are restored
 together. Completed requests stay completed; running read requests restart, queued commands
-keep their lanes and timers keep their remaining delay. Old executors are closed; callbacks
+keep their lanes. Restoring during search debounce starts a new 350 ms delay; no debounce
+deadline is stored in the feature state. Old executors are closed; callbacks
 from an earlier branch cannot modify the new frame. After successful restoration, entries after the selected event are removed. Earlier entries
 and the selected event stay available; new execution extends this linear history. The original
 running session is replaced. This is an at-least-once restart of read-only

@@ -28,7 +28,8 @@ internal fun <C : Any, CMD : Any> StoreOrigin<C, CMD>.adaptStateSaver(saver: Sta
     }
 
 /**
- * Continues an isolated run at a checkpoint without executing entry hooks again.
+ * Continues an isolated run without repeating completed entry work. Unfinished suspend
+ * onEnter work restarts from its beginning using the saved context; viewing history runs no I/O.
  * Running commands are executed again (at-least-once); use only with restartable handlers.
  * Queued commands retain their lanes, and timers retain their remaining delay. Old accepted
  * inputs and transient effects are not replayed. Checkpoints with unacknowledged effects or

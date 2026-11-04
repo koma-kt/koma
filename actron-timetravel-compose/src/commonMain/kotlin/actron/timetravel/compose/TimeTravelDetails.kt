@@ -73,13 +73,16 @@ internal fun Set<actron.statechart.StateId>.names(): String = map { it.value }.s
 
 internal fun MachineInput<*>.panelLabel(): String =
     when (this) {
+        is MachineInput.EntryResult -> "onEnter"
         is MachineInput.Start -> "Start"
-        is MachineInput.Dispatch -> action::class.simpleName ?: "Action"
-        is MachineInput.CommandResult -> "Answer · ${action::class.simpleName ?: "Result"}"
+        is MachineInput.Dispatch -> action.displayName(fallback = "Action")
+        is MachineInput.CommandResult -> "Answer · ${action.displayName(fallback = "Result")}"
         is MachineInput.CommandCompleted -> "Command completed"
         is MachineInput.CommandFailed -> "Command failed"
         is MachineInput.CommandAbandoned -> "Command abandoned"
         is MachineInput.TimerFired -> "Timer fired"
-        is MachineInput.BridgeReceived -> "Bridge · ${action::class.simpleName ?: "Message"}"
-        is MachineInput.External -> "Source · ${action::class.simpleName ?: "Data"}"
+        is MachineInput.BridgeReceived -> "Bridge · ${action.displayName(fallback = "Message")}"
+        is MachineInput.External -> "Source · ${action.displayName(fallback = "Data")}"
     }
+
+private fun actron.core.Action.displayName(fallback: String): String = this::class.simpleName ?: fallback

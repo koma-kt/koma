@@ -49,16 +49,20 @@ class WeatherHistoryTest {
     fun continuationExplainsExecutorRestrictionsInsteadOfGuessingFromState() {
         val initial = WeatherFrame()
         assertEquals(expected = 0, actual = initial.continuationWork().endings + initial.continuationWork().effects)
-        val machine = CitySearchMachine.create()
-        val started = machine.decide(initial.search.snapshot, MachineInput.Start(MachineTime.Zero))
-        val editing = machine.decide(started.snapshot, MachineInput.Dispatch(CitySearchAction.ChangeQuery("Paris"), MachineTime.Zero))
-        val timer = editing.timersScheduled.single()
-        val loading = machine.decide(editing.snapshot, MachineInput.TimerFired(timer.id, timer.deadline))
-        val ending = initial.copy(search = ExecutorCheckpoint(loading.snapshot, timer.deadline, ending = loading.commands.associateBy { it.id }))
-        assertFalse(ending.canResume())
-        val blocked = ending.continuationWork()
-        assertEquals(expected = 1, actual = blocked.endings)
-        assertEquals(expected = 0, actual = blocked.effects)
+        val blockedFrame =
+            initial.copy(
+                search =
+                    initial.search.copy(
+                        effects =
+                            listOf(
+                                PendingEffect(id = EffectId(value = 1), event = actron.example.weather.feature.weather.presentation.WeatherScreenEvent.RefreshChildren, policy = EffectPolicy.Transient, attempts = 0, handling = false),
+                            ),
+                    ),
+            )
+        assertFalse(actual = blockedFrame.canResume())
+        val blocked = blockedFrame.continuationWork()
+        assertEquals(expected = 0, actual = blocked.endings)
+        assertEquals(expected = 1, actual = blocked.effects)
     }
 
     @Test
@@ -68,7 +72,7 @@ class WeatherHistoryTest {
         assertFalse(history.panelVisible.value)
         val selected =
             history.timeline.entries.value
-                .last()
+                .last { it.details.changes.any { change -> change.path == "query" } }
         history.panel.select(selected)
         history.panel.previewSelected()
         traceEdits(history, listOf("Berlin", "Berlinn"))
@@ -107,8 +111,8 @@ class WeatherHistoryTest {
         val selectedGraph = history.graph(selected) as actron.timetravel.compose.HistoryGraph.Machine
         assertEquals(actron.timetravel.compose.HistoryGraphProfile.Unavailable, selectedGraph.profile)
         val selectedHits = (selectedGraph.coverage as actron.timetravel.compose.HistoryGraphCoverage.Recorded).hits
-        // Each edit takes both the ChangeQuery transition and its automatic choice.
-        assertEquals(expected = 4L, actual = selectedHits.values.sum())
+        // Entry work is a separate recorded input; the selected cut is before its final choice.
+        assertEquals(expected = 5L, actual = selectedHits.values.sum())
         assertEquals(
             expected = 6L,
             actual =
@@ -122,7 +126,7 @@ class WeatherHistoryTest {
         history.session.beginBranch(history.restoreDiagnostics(selected.snapshot))
         traceEdits(history, listOf("Paris"))
         assertEquals(
-            expected = 6L,
+            expected = 7L,
             actual =
                 history
                     .snapshot()
@@ -131,8 +135,8 @@ class WeatherHistoryTest {
                     .hits.values
                     .sum(),
         )
-        assertEquals(expected = 4L, actual = selectedHits.values.sum(), message = "Historical coverage is immutable")
-        assertEquals(expected = 4L, actual = (history.graph(selected) as actron.timetravel.compose.HistoryGraph.Machine).let { (it.coverage as actron.timetravel.compose.HistoryGraphCoverage.Recorded).hits.values.sum() })
+        assertEquals(expected = 5L, actual = selectedHits.values.sum(), message = "Historical coverage is immutable")
+        assertEquals(expected = 5L, actual = (history.graph(selected) as actron.timetravel.compose.HistoryGraph.Machine).let { (it.coverage as actron.timetravel.compose.HistoryGraphCoverage.Recorded).hits.values.sum() })
     }
 
     private fun traceEdits(
@@ -149,12 +153,30 @@ class WeatherHistoryTest {
                 .single()
         var snapshot = checkpoint.snapshot
         val inputs = listOf<MachineInput<CitySearchAction>>(MachineInput.Start(MachineTime.Zero)) + queries.map { MachineInput.Dispatch(CitySearchAction.ChangeQuery(it), MachineTime.Zero) }
-        inputs.forEach { input ->
+
+        fun record(input: MachineInput<CitySearchAction>) {
             val explained = machine.decideExplained(snapshot, input)
             persistence.onCommitted(InputAttribution.Unattributed, input, explained.decision)
             observer.onDecided(InputAttribution.Unattributed, input, explained)
             observer.onCommitted(InputAttribution.Unattributed, input, explained.decision)
             snapshot = explained.decision.snapshot
+        }
+        inputs.forEach { input ->
+            record(input = input)
+            if (snapshot.context.phase == actron.example.weather.core.mvi.RequestState.QueryChanged) {
+                val next = if (snapshot.context.query.isBlank()) actron.example.weather.core.mvi.RequestState.Idle else actron.example.weather.core.mvi.RequestState.Debouncing
+                record(
+                    input =
+                        MachineInput.EntryResult(
+                            activation =
+                                snapshot.pendingEntries.values
+                                    .single()
+                                    .activation,
+                            output = EntryOutput.Transition(context = snapshot.context.copy(phase = next)),
+                            now = MachineTime.Zero,
+                        ),
+                )
+            }
         }
     }
 }

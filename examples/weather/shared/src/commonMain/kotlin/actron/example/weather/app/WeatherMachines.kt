@@ -6,13 +6,13 @@ import actron.decompose.MachineRecording
 import actron.example.weather.app.session.WeatherCheckpoints
 import actron.example.weather.app.session.WeatherSession
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherAction
-import actron.example.weather.feature.currentweather.presentation.CurrentWeatherContext
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
+import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
 import actron.example.weather.feature.currentweather.presentation.LoadCurrentWeather
 import actron.example.weather.feature.currentweather.presentation.currentWeatherHandler
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastAction
-import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastContext
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
+import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastState
 import actron.example.weather.feature.hourlyforecast.presentation.LoadHourlyForecast
 import actron.example.weather.feature.hourlyforecast.presentation.hourlyForecastHandler
 import actron.example.weather.feature.weather.domain.HourlyForecastRepository
@@ -20,12 +20,12 @@ import actron.example.weather.feature.weather.domain.WeatherRepository
 import actron.example.weather.feature.weather.presentation.CityWeatherMachine
 import actron.example.weather.feature.weather.presentation.WeatherContext
 import actron.example.weather.feature.weather.presentation.WeatherScreenAction
-import actron.example.weather.feature.weather.presentation.WeatherScreenContext
 import actron.example.weather.feature.weather.presentation.WeatherScreenEvent
+import actron.example.weather.feature.weather.presentation.WeatherScreenState
 import actron.example.weather.feature.weatheradvice.presentation.LoadWeatherAdvice
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceAction
-import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceContext
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceMachine
+import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceState
 import actron.example.weather.feature.weatheradvice.presentation.weatherAdviceHandler
 import actron.observability.StoreInstanceId
 import actron.statechart.machine.BridgeMessage
@@ -62,10 +62,10 @@ class WeatherMachines(
     private val scope = CoroutineScope(context = coroutineContext + SupervisorJob())
     private val group = MachineGroup()
     private val closeStores = mutableListOf<() -> Unit>()
-    private val screenMember = group.member<WeatherScreenContext, WeatherScreenAction, actron.example.weather.core.mvi.NoCommand, WeatherScreenEvent>(id = StoreInstanceId(value = "weather-screen"))
-    private val currentMember = group.member<CurrentWeatherContext, CurrentWeatherAction, LoadCurrentWeather, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-current"))
-    private val hourlyMember = group.member<HourlyForecastContext, HourlyForecastAction, LoadHourlyForecast, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-hourly"))
-    private val adviceMember = group.member<WeatherAdviceContext, WeatherAdviceAction, LoadWeatherAdvice, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-advice"))
+    private val screenMember = group.member<WeatherScreenState, WeatherScreenAction, actron.example.weather.core.mvi.NoCommand, WeatherScreenEvent>(id = StoreInstanceId(value = "weather-screen"))
+    private val currentMember = group.member<CurrentWeatherState, CurrentWeatherAction, LoadCurrentWeather, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-current"))
+    private val hourlyMember = group.member<HourlyForecastState, HourlyForecastAction, LoadHourlyForecast, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-hourly"))
+    private val adviceMember = group.member<WeatherAdviceState, WeatherAdviceAction, LoadWeatherAdvice, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-advice"))
     private val city = initial.screen.snapshot.context.city
 
     val current = createStore(machine = CurrentWeatherMachine.create(), checkpoint = initial.current, handler = currentWeatherHandler(repository = currentRepository), member = currentMember, recording = recordings.current, update = { session.updateWeather(checkpoint = session.weatherCheckpoint(city = city).copy(current = it)) })
@@ -86,7 +86,7 @@ class WeatherMachines(
 
     val state =
         combine(flow = screen.state, flow2 = current.state, flow3 = hourly.state, flow4 = advice.state, transform = { parent, current, hourly, advice ->
-            WeatherContext(city = parent.context.city, current = current.context.state, hourly = hourly.context.state, advice = advice.context.state)
+            WeatherContext(city = parent.context.city, current = current.context.phase, hourly = hourly.context.phase, advice = advice.context.phase)
         }).stateIn(scope = scope, started = SharingStarted.Eagerly, initialValue = initial.context())
 
     init {

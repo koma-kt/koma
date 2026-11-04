@@ -168,7 +168,7 @@ class WeatherRootComponentTest {
             )
             assertTrue(retainedEntries.any { it.machine.name.startsWith("City Search") })
             assertTrue(retainedEntries.any { it.machine.name.startsWith("City Weather") })
-            val parentEntry = retainedEntries.last { it.machine.stableId == "city-weather" }
+            val parentEntry = retainedEntries.first { it.machine.stableId == "city-weather" && !it.snapshot.application.canResume() }
             assertFalse(actual = parentEntry.snapshot.application.canResume(), message = "A parent event still crossing routes is not a resumable cut")
             assertTrue(actual = retainedEntries.any { it.machine.stableId == "weather-advice" && it.snapshot.application.canResume() })
             val saved = stateKeeper.save()

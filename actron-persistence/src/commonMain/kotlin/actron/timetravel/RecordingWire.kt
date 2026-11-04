@@ -59,6 +59,7 @@ internal class SnapshotWire(
     val commands: Map<String, CommandRecordWire>,
     val timers: Map<String, TimerWire>,
     val counters: CountersWire,
+    val pendingEntries: Map<String, EntryRecordWire>,
 )
 
 @Serializable
@@ -95,6 +96,10 @@ internal class InputWire(
     val type: String,
     val now: String,
     val action: JsonElement = JsonNull,
+    val activation: JsonElement = JsonNull,
+    val entryKind: JsonElement = JsonNull,
+    val entryContext: JsonElement = JsonNull,
+    val entryEvent: JsonElement = JsonNull,
     @Serializable(with = LongWireNode::class) val command: JsonElement = JsonNull,
     @Serializable(with = LongWireNode::class) val timer: JsonElement = JsonNull,
     @Serializable(with = FailureWireNode::class) val failure: JsonElement = JsonNull,
@@ -200,3 +205,9 @@ private object PolicyWireNode : WireNode<PolicyWire>({ PolicyWire.serializer() }
 private object DecisionWireNode : WireNode<DecisionWire>({ DecisionWire.serializer() })
 
 private object FailureWireNode : WireNode<FailureWire>({ FailureWire.serializer() })
+
+@Serializable
+internal class EntryRecordWire(
+    val activation: Long,
+    val command: Long,
+)

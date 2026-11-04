@@ -1,150 +1,108 @@
 package actron.example.weather
 
+import actron.core.Action
+import actron.core.Event
+import actron.core.InputAttribution
 import actron.example.weather.core.domain.City
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.domain.CityOption
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherAction
-import actron.example.weather.feature.currentweather.presentation.CurrentWeatherContext
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
-import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastAction
-import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastContext
-import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
-import actron.example.weather.feature.weather.domain.*
-import actron.example.weather.feature.weather.presentation.*
-import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceAction
-import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceContext
-import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceMachine
+import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
+import actron.example.weather.feature.weather.domain.WeatherReading
+import actron.statechart.machine.DecisionOutcome
+import actron.statechart.machine.DecisionTraceObserver
+import actron.statechart.machine.EntryOutput
+import actron.statechart.machine.ExplainedDecision
+import actron.statechart.machine.Machine
 import actron.statechart.machine.MachineInput
+import actron.statechart.machine.MachineSnapshot
+import actron.statechart.machine.MachineTime
 import actron.statechart.test.*
+import kotlinx.coroutines.test.TestScope
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
-/**
- * Developer-authored finite data and properties for the pure graph explorer, not a test script.
- * actions/replies supply choices; rule checks every decision; goal requires a concrete path.
- * See src/commonTest/README.md for running, coverage limits and recording export.
- */
+/** Suspend behavior is exercised with the real executor; traces can still be replayed without I/O. */
 object GeneratedWeatherScenarios {
-    val moscow = City("Москва", 55.75, 37.62)
-    val kazan = City("Казань", 55.79, 49.12)
+    val moscow = City(name = "Москва", latitude = 55.75, longitude = 37.62)
+    val kazan = City(name = "Казань", latitude = 55.79, longitude = 49.12)
 
-    fun search() =
-        CitySearchMachine.create().scenarios(CitySearchState()) {
-            actions { state ->
-                // A finite domain/budget for edits, not an asserted sequence.
-                if (state.context.revision < 2) listOf("", moscow.name, kazan.name).map(CitySearchAction::ChangeQuery) else emptyList()
-            }
-            replies(setOf(ReplyMode.Active, ReplyMode.LateCommand, ReplyMode.LateAction)) { command ->
-                // Use the emitted command's revision; inventing a current revision would hide stale replies.
-                val city = if (command.query == moscow.name) moscow else kazan
-                listOf(
-                    CitySearchAction.Found(command.revision, listOf(CityOption(city))),
-                    CitySearchAction.Failed(command.revision, "offline"),
-                )
-            }
-            rule("query-edit-immediately-cancels-previous-request") { step ->
-                val input = step.input
-                input !is MachineInput.Dispatch || input.action !is CitySearchAction.ChangeQuery ||
-                    step.before.commands.all { (id, command) ->
-                        id !in step.after.commands && command.scope in step.explained.decision.cancelledScopes
-                    }
-            }
-            rule("old-search-answer-does-not-change-context") { step ->
-                val action =
-                    when (val input = step.input) {
-                        is MachineInput.Dispatch -> input.action
-                        is MachineInput.CommandResult -> input.action
-                        else -> return@rule true
-                    }
-                val old =
-                    when (action) {
-                        is CitySearchAction.Found -> action.revision != step.before.context.revision
-                        is CitySearchAction.Failed -> action.revision != step.before.context.revision
-                        else -> false
-                    }
-                !old || step.after.context == step.before.context
-            }
-            rule("results-belong-to-current-query") { step ->
-                val state = step.after.context
-                val phase = state.phase
-                phase !is RequestState.Success || phase.value.all { it.city.name == state.query }
-            }
-            goal("late-moscow-command") { steps ->
-                // This goal prevents a vacuous pass when no stale reply was ever exercised.
-                steps.last().let { step ->
-                    val input = step.input
-                    if (input !is MachineInput.CommandResult) {
-                        false
-                    } else {
-                        val action = input.action
-                        action is CitySearchAction.Found && action.results.any { it.city == moscow } &&
-                            step.before.context.query == kazan.name && step.before.context.phase is RequestState.Loading && input.command !in step.before.commands
-                    }
-                }
-            }
-            goal("late-moscow-action") { steps ->
-                steps.last().let { step ->
-                    val input = step.input
-                    if (input !is MachineInput.Dispatch) {
-                        false
-                    } else {
-                        val action = input.action
-                        action is CitySearchAction.Found && action.results.any { it.city == moscow } &&
-                            step.before.context.query == kazan.name && step.before.context.phase is RequestState.Loading && action.revision != step.before.context.revision
-                    }
-                }
-            }
-            goal("kazan-success-after-late-moscow") { steps ->
-                val last = steps.last().after.context
-                last.query == kazan.name && last.phase is RequestState.Success &&
-                    steps.any { step ->
-                        val input = step.input
-                        if (input !is MachineInput.CommandResult) {
-                            false
-                        } else {
-                            val action = input.action
-                            input.command !in step.before.commands && action is CitySearchAction.Found && action.results.any { it.city == moscow } &&
-                                step.before.context.query == kazan.name && step.before.context.phase is RequestState.Loading
-                        }
-                    }
-            }
+    suspend fun search(scope: TestScope) =
+        recorded(
+            machine = CitySearchMachine.create(),
+            context = CitySearchState(),
+            scope = scope,
+        ) { trace ->
+            send(action = CitySearchAction.ChangeQuery(query = moscow.name))
+            advanceBy(duration = 350.milliseconds)
+            val old =
+                snapshot.pendingEntries.values
+                    .single()
+                    .activation
+            val oldRevision = snapshot.context.revision
+            send(action = CitySearchAction.ChangeQuery(query = kazan.name))
+            advanceBy(duration = 350.milliseconds)
+            val lateAction = CitySearchAction.Found(revision = oldRevision, results = listOf(CityOption(city = moscow)))
+            val lateInput = MachineInput.EntryResult(activation = old, output = EntryOutput.Dispatch(action = lateAction), now = MachineTime(sinceStart = scope.testScheduler.currentTime.milliseconds))
+            // Inject an obsolete worker outcome through the same pure decision entrypoint as the queue.
+            val rejected = machine.decideExplained(snapshot = snapshot, input = lateInput)
+            assertIs<DecisionOutcome.Ignored>(value = rejected.decision.outcome)
+            trace.onDecided(input = InputAttribution.Unattributed, machineInput = lateInput, explained = rejected)
+            send(action = lateAction)
+            assertIs<RequestState.Loading>(value = snapshot.context.phase)
+            val request = runningCommands.single()
+            answer(command = request.id, result = CitySearchAction.Found(revision = request.command.revision, results = listOf(CityOption(city = kazan))))
+            assertEquals(expected = kazan, actual = assertIs<RequestState.Success<List<CityOption>>>(value = snapshot.context.phase).value.single().city)
+            assertTrue(actual = handler.cancelled.isNotEmpty())
         }
 
-    fun weather() =
-        CurrentWeatherMachine.create().scenarios(initial = CurrentWeatherContext(city = kazan), configure = {
-            actions(CurrentWeatherAction.Refresh)
-            goal(name = "current-success", reached = { steps ->
-                steps
-                    .last()
-                    .after.context.state is RequestState.Success
-            })
-            replies(values = { command ->
-                listOf(
-                    CurrentWeatherAction.Loaded(reading = WeatherReading(city = command.city, temperature = 12.0, feelsLike = 10.0, wind = 3.0, code = 0, time = "12:00")),
-                    CurrentWeatherAction.Failed(message = "offline"),
-                )
-            })
-        })
+    suspend fun weather(scope: TestScope) =
+        recorded(
+            machine = CurrentWeatherMachine.create(),
+            context = CurrentWeatherState(city = kazan),
+            scope = scope,
+        ) { _ ->
+            send(action = CurrentWeatherAction.Refresh)
+            answer(command = runningCommands.single().id, result = CurrentWeatherAction.Loaded(reading = WeatherReading(city = kazan, temperature = 12.0, feelsLike = 10.0, wind = 3.0, code = 0, time = "12:00")))
+            assertIs<RequestState.Success<WeatherReading>>(value = snapshot.context.phase)
+        }
+}
 
-    fun hourly() =
-        HourlyForecastMachine.create().scenarios(initial = HourlyForecastContext(city = kazan), configure = {
-            actions(HourlyForecastAction.Refresh, HourlyForecastAction.Retry)
-            replies(values = { command ->
-                listOf(
-                    HourlyForecastAction.Loaded(forecast = HourlyForecast(city = command.city, hours = listOf(ForecastHour(time = "13:00", temperature = 13.0, wind = 3.0, rainChance = 10)))),
-                    HourlyForecastAction.Failed(message = "offline"),
-                )
-            })
-        })
+private suspend fun <C : Any, A : Action, CMD : Any, E : Event> recorded(
+    machine: Machine<C, A, CMD, E>,
+    context: C,
+    scope: TestScope,
+    block: suspend MachineTestDriver<C, A, CMD, E>.(ExecutedTrace<C, A, CMD, E>) -> Unit,
+): ScenarioTrace<C, A, CMD, E> {
+    val initial = machine.initialSnapshot(context = context)
+    val trace = ExecutedTrace<C, A, CMD, E>(initial = initial)
+    val driver = MachineTestDriver(machine = machine, context = context, scope = scope, observers = listOf(trace))
+    try {
+        driver.start()
+        driver.block(trace)
+        assertTrue(actual = driver.failures.isEmpty())
+        return ScenarioTrace(scenario = MachineScenario(name = machine.id.value, inputs = trace.steps.map { it.input }), initial = initial, steps = trace.steps.toList(), coverage = driver.coverage, failures = emptyList())
+    } finally {
+        driver.close()
+    }
+}
 
-    fun advice() =
-        WeatherAdviceMachine.create().scenarios(initial = WeatherAdviceContext(city = kazan), configure = {
-            actions(WeatherAdviceAction.Refresh, WeatherAdviceAction.Retry, WeatherAdviceAction.Dismiss)
-            replies(values = { command ->
-                listOf(
-                    WeatherAdviceAction.Loaded(city = command.city, items = emptyList()),
-                    WeatherAdviceAction.Loaded(city = command.city, items = listOf(WeatherAdvice.Umbrella)),
-                    WeatherAdviceAction.Failed(message = "offline"),
-                )
-            })
-        })
+private class ExecutedTrace<C : Any, A : Action, CMD : Any, E : Event>(
+    initial: MachineSnapshot<C>,
+) : DecisionTraceObserver<C, A, CMD, E> {
+    private var snapshot = initial
+    val steps = mutableListOf<ScenarioStep<C, A, CMD, E>>()
+
+    override fun onDecided(
+        input: InputAttribution,
+        machineInput: MachineInput<A>,
+        explained: ExplainedDecision<C, CMD, E>,
+    ) {
+        steps += ScenarioStep(before = snapshot, input = machineInput, explained = explained)
+        snapshot = explained.decision.snapshot
+    }
 }
