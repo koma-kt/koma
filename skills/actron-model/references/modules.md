@@ -1,19 +1,21 @@
 # Module routing
 
-Use the root README's Modules table and each `<module>/README.md` as the API authority.
+Use the root README's Modules table and each `<module>/README.md` for orientation; verify signatures against source/API dumps.
 Read only the modules relevant to the task. This map explains boundaries, not every symbol.
 
 | Need | Module / boundary |
 |---|---|
 | Internal execution engine and shared action/event/lifecycle contracts | `actron-core`; application construction uses `MachineStore` |
-| Compose rendering of ordinary stores | `actron-compose` |
+| Retained machine setup and lifecycle observation | `actron-decompose` |
+| Compose collection/rendering of Store snapshots | `actron-compose` |
 | Transient process-wide messages from command handlers | `actron-message`; not a substitute for typed machine commands |
 | Logging a Store | `actron-logging` |
 | Runtime test helpers for Stores and machines | `actron-test`; machine scenarios belong in the module below |
 | Application reducer: our StateChart Machine, typed DSL, hierarchy, parallel states, invoke, executor | `actron-statechart` |
 | Deliver retained machine effects in Compose | `actron-statechart-compose` |
 | Scripted machine commands, virtual clocks, coverage, exploration | `actron-statechart-test`; test dependencies only |
-| Bounded recording, persistence codecs, replay, branching, groups | `actron-timetravel` |
+| Checkpoint codecs/restoration without debug tooling | `actron-persistence` |
+| Bounded recording, replay and branching | `actron-timetravel` |
 | History panel, graph, resizing, locale, diagnostics UI | `actron-timetravel-compose`; supplies UI, not app navigation |
 | Bounded ordered diagnostic journal / storage | `actron-observability` |
 | Causal traces spanning decisions, commands, timers and effects | `actron-diagnostics` |
@@ -22,8 +24,9 @@ Read only the modules relevant to the task. This map explains boundaries, not ev
 
 Examples are applications, not published dependencies:
 
-- `examples/weather`: two-screen Compose/Decompose example, search and parallel current/
-  forecast machines, session history, persistence adapter. platform hosts and optional `debugTools` under the same directory.
+- `examples/weather`: two-screen Compose/Decompose example, search plus a screen routing to independent current-weather,
+  hourly-forecast and advice machines. Production code lives in `shared`, recording/inspector
+  integration and scenario tests in `debugTools`, with platform hosts alongside.
 
 Repository-only tooling:
 
