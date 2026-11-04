@@ -12,7 +12,7 @@ Start with three parts:
 
 | Part | Responsibility |
 |---|---|
-| `Machine` | Pure decisions: which state comes next and which commands to run |
+| `Machine` | State-local action handlers and declarations of state-owned entry work |
 | `MachineStore` | Queued execution, observable snapshots and command/timer lifetimes |
 | `CommandHandler` | I/O; returns actions to the machine |
 
@@ -30,8 +30,9 @@ remain application concerns.
 
 ## 1. A Store for a counter
 
-The typed DSL declares transitions and handlers inside their state. Here one state owns
-context-only updates; no separate node IDs or reducer registration strings are needed.
+`behaviorStateMachine` declares handlers inside their state. Read the immutable `state` and
+propose its replacement with `transitionTo`. No separate node IDs or reducer registration
+strings are needed.
 
 ```kotlin
 import actron.core.Action
@@ -45,14 +46,18 @@ sealed interface CounterAction : Action {
     data object Decrement : CounterAction
 }
 
-val counterMachine = typedStateMachine<CounterState, CounterAction, Nothing, Nothing>(
+val counterMachine = behaviorStateMachine<CounterState, CounterAction, Nothing, Nothing>(
     id = DefinitionId("counter"),
     version = DefinitionVersion("1"),
     initial = CounterState(),
 ) {
     state<CounterState> {
-        internal<CounterAction.Increment> { context, _ -> context.copy(count = context.count + 1) }
-        internal<CounterAction.Decrement> { context, _ -> context.copy(count = (context.count - 1).coerceAtLeast(0)) }
+        on<CounterAction.Increment> {
+            transitionTo(state = state.copy(count = state.count + 1))
+        }
+        on<CounterAction.Decrement> {
+            transitionTo(state = state.copy(count = (state.count - 1).coerceAtLeast(0)))
+        }
     }
 }
 
@@ -85,7 +90,7 @@ The Store engine has no public construction DSL. For retained components, use
 
 ## Requests and results
 
-Declare a command in the state's `onEnter` hook. Execute it in a `commandHandler`, returning
+Declare a command in the state's suspend `onEnter` block. Execute it in a `commandHandler`, returning
 a success or failure action. Leaving the owning state cancels its commands; results from
 commands that are no longer registered are rejected by the runtime.
 
@@ -108,7 +113,14 @@ Pass this handler to `MachineStore`. `onFailure` maps service errors to domain a
 coroutine cancellation is rethrown. For several command types, use
 `commandHandlers { handle<CommandType>(onFailure = ...) { ... } }`.
 For streams with multiple results, use the lower-level `CommandHandler` callback.
-See the [request and threading contract](doc/guides/machine-mvi.md).
+In the behavior DSL, `on<Action>` is synchronous and transactional; `onEnter` runs outside
+that transaction and may suspend. Use ordinary Kotlin conditions and `delay`. Entry work
+belongs to the state activation and is cancelled on exit. `state` stays the snapshot captured
+at handler entry; `transitionTo` does not mutate it. Even a same-state transition exits and
+re-enters, restarting entry work.
+
+See the [behavior DSL contract](actron-statechart/README.md#state-local-kotlin-behavior)
+and [request and threading contract](doc/guides/machine-mvi.md).
 
 ## Component lifetime
 
@@ -139,17 +151,19 @@ feature's behaviour.
 
 | Shape | Example | Actron representation |
 |---|---|---|
-| One state with changing data | A counter or an editable form | A data class and `internal<Action>` updates |
-| Flat, mutually exclusive phases | Idle → Loading → Content or Error | Sealed values with `typedStateMachine` |
+| One state with changing data | A counter or an editable form | `behaviorStateMachine`, `on<Action>` and `transitionTo` |
+| Flat, mutually exclusive phases | Idle → Loading → Content or Error | `behaviorStateMachine`; `phaseOf` selects the phase from shared context |
 | Hierarchical phases | Connected contains Idle and ChatOpen | `compound<Parent>`; one active child at a time |
 | Parallel phases | Connection status and upload status evolve independently | `parallelStateMachine` regions, or nested `parallel<Parent>` |
 | Return to a previous substate | Resume an interrupted multi-step editor | `history()` / `history(deep = true)` and `onHistory<Action, Parent>()` |
-| Timed transitions | Debounce a query or leave Loading after a timeout | `after<Target>(duration)` inside a state |
+| Timed work | Debounce or request timeout | Suspend `onEnter` with coroutine delay/timeout; explicit charts also offer `after<Target>` |
 
 Keep changing data such as queries and counters in context fields. Use distinct states when
 allowed actions or work lifetimes change. The typed DSL derives graph IDs from state types;
 there is no separate phase-to-ID map. See the [typed DSL guide](actron-statechart/README.md#state-types-shared-by-graph-ui-and-recordings)
-for shared context bindings, hierarchy and history.
+for explicit graph declarations, shared context bindings, hierarchy and history.
+`typedStateMachine` remains useful when static transition structure is part of the model;
+behavior handlers use ordinary Kotlin and expose a conservative graph of possible targets.
 
 ### Several machines on one screen
 
@@ -170,7 +184,7 @@ must own a child workflow in one atomic snapshot.
 
 A StateChart `Machine` defines behavior; `MachineStore` executes it and exposes `MachineSnapshot<C>`.
 
-A pure `Machine` takes a snapshot and an input and returns a `Decision`. Commands, timer
+The decision engine takes a snapshot and an input and returns a `Decision`. Commands, timer
 changes and effects are data in that decision. `MachineStore` commits it, then a
 `CommandHandler` performs I/O and sends results back as new inputs.
 
@@ -186,9 +200,10 @@ val incremented = counterMachine.decide(
 // incremented.snapshot.context.count == 1; no Store or I/O was started.
 ```
 
-Replay evaluates recorded inputs without running I/O. It requires pure rules, explicit time
-and compatible machine definitions/codecs. Keep randomness and external reads out of guards
-and reducers; pass their results as inputs.
+`decide` does not execute suspend entry work. `MachineStore` runs that work and queues its
+outcomes. Replay applies recorded outcomes without repeating I/O. It requires compatible
+machine definitions/codecs and pure action rules; keep external reads and randomness out of
+those rules. A behavior graph is a conservative envelope, not proof that every edge is reachable.
 
 The typed DSL supports [sealed phases](actron-statechart/README.md#state-types-shared-by-graph-ui-and-recordings),
 [parallel regions](actron-statechart/README.md#typed-parallel-regions),
@@ -218,8 +233,9 @@ The inspector is reusable through [actron-timetravel-compose](actron-timetravel-
 ![Search Rome, inspect earlier events, then continue execution from a saved checkpoint.](doc/assets/weather-time-travel.gif)
 
 Viewing history renders saved frames without repeating network calls. **Continue here**
-restores a compatible checkpoint and starts a new continuation: unfinished read requests
-restart, timers retain their remaining delay, and later history is replaced. The host restores
+restores a compatible checkpoint and starts a new continuation. Unfinished behavior entry
+work restarts from its beginning: Weather gets a fresh debounce delay and request timeout.
+Explicit chart timers retain their remaining delay. Later history is replaced. The host restores
 navigation. **Export** shares a recording; **Import** opens it in view-only mode.
 See [Weather's restoration and replay contract](examples/weather/README.md#session-history-and-replay).
 

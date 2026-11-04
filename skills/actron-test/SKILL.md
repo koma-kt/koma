@@ -34,6 +34,9 @@ Select meaningful edge cases from the model: debounce at the boundary, replaceme
 stale generations or mismatched identities, error/timeout recovery, hierarchy exit, invoke
 restart and restoration. For persistence, round-trip the real codec/checkpoint and verify
 what re-executes; restoring a request is not resuming arbitrary suspended instructions.
+Behavior DSL unfinished `onEnter` work restarts from the beginning; Weather debounce and
+request timeout start fresh. Explicit chart timers instead retain their remaining delay.
+Test behavior entry outcomes through the queued executor, not `Machine.decide` alone.
 
 ## Coverage and reports
 

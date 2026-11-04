@@ -20,13 +20,19 @@ the signatures in `actron-statechart/src/commonMain/kotlin/actron/statechart/mac
   handwritten reducer interface, standalone Store DSL, or legacy coroutine chart adapter.
   `StoreBuilder` and `createRuntimeStore` are internal engine infrastructure.
 
-- Prefer the typed DSL used by Weather's `CitySearchMachine.kt` and `CityWeatherMachine.kt`.
-  A direct sealed state can be the complete context. A context-based machine binds its state
-  once through read/write functions. Do not maintain a separate phase enum and StateId map.
-- Start with `typedStateMachine<State, Action, Command, Event>` when state is the complete
-  context; use `Nothing` for absent commands/events. Add `readState`/`writeState` only when
-  context also contains shared data. Use `internal<Action>` for data-only updates and
-  `on<Action, Target>` / `transition<Action, Target>` for phase changes.
+- For state-local Kotlin behavior, start with `behaviorStateMachine<State, Action, Command,
+  Event>`; use `Nothing` for absent commands/events. `on<Action>` reads immutable `state`
+  and proposes at most one complete replacement with `transitionTo(state = ...)`.
+  For shared context use `phaseOf`; no write lens or separate phase-to-ID map is needed.
+  Same-state transitions exit/re-enter and restart entry work. The captured `state` does not
+  change after `transitionTo`. Weather uses this API.
+- Suspend `onEnter` runs outside action processing and is cancelled on exit/close. Use ordinary
+  Kotlin conditions/delays there, and `command` for the existing command handler integration.
+  Late entry outcomes are activation-checked. Resume restarts unfinished entry work from its
+  beginning, including delay/timeout; it does not resume a coroutine continuation.
+- Use `typedStateMachine` for explicit static graph declarations, hierarchy/history and chart
+  timers. Its `internal<Action>` updates avoid exit/re-entry. Behavior graphs conservatively
+  include possible targets; arbitrary Kotlin control flow is not exact static reachability.
 - Use parallel regions for concurrent phases within one machine/snapshot. For independently
   owned features, use separate machines and `MachineGroup` typed member routes. A route maps
   synchronously and carries zero or one action per event; separate routes provide fan-out.
@@ -34,10 +40,7 @@ the signatures in `actron-statechart/src/commonMain/kotlin/actron/statechart/mac
   demonstrates screen/current/hourly/advice composition, not a single parallel machine.
   Use hierarchical states for shared lifetime and typed invocation for parent-owned children
   requiring an atomic snapshot. Do not rebuild these contracts with flags or detached jobs.
-- Centralize a shared automatic choice in an `always<Target>` state when appropriate;
-  Weather search routes query edits through `RequestState.QueryChanged`. Automatic steps
-  settle within the decision; do not require the UI to dispatch the next phase.
-- Keep reducers and guards pure. Declare commands in machine hooks and execute use cases in
+- Keep action rules and guards pure. Declare commands in entry work and execute use cases in
   command handlers. Results return as typed actions through the Store. Choose command scopes,
   lanes and cancellation policies to match the domain; do not bypass them with detached jobs.
   Prefer `commandHandler(onFailure = ...)` for one result or `commandHandlers { handle<T> ... }`
