@@ -143,8 +143,8 @@ The helper is part of `actron-decompose`; these changes have not yet been releas
 
 `CitySearchMachine` uses `RequestState<List<CityOption>>`:
 `Idle → QueryChanged → Debouncing → Loading → Success / Error`.
-Every edit enters `QueryChanged` and updates the query and revision once. Its guarded `always`
-transitions select `Idle` for blank input or `Debouncing` otherwise, within the same decision.
+Every edit enters `QueryChanged` and updates the query and revision once. Its ordered `always`
+transitions select `Idle` for blank input, falling back to `Debouncing` otherwise, within the same decision.
 350 ms of quiet starts the request, even for one letter.
 Clearing cancels pending work and restores `Idle`. An empty server response is `Success(emptyList())`.
 Responses for outdated revisions are ignored. Requests time out after eight seconds.
@@ -220,8 +220,8 @@ Selecting an event immediately renders the saved application frame with inputs d
 repositories. Live recording continues in the background. Switching to **Live** exits preview.
 **Continue here** replaces the Decompose stack and executors with the selected frame and exits preview. Search context and both independent weather machines are restored
 together. Completed requests stay completed; running read requests restart, queued commands
-keep their lanes. Restoring during search debounce starts a new 350 ms delay; no debounce
-deadline is stored in the feature state. Old executors are closed; callbacks
+keep their lanes. Restoring search v13 preserves the remaining debounce and timeout duration; the timer
+deadline is stored in the machine snapshot. Old executors are closed; callbacks
 from an earlier branch cannot modify the new frame. After successful restoration, entries after the selected event are removed. Earlier entries
 and the selected event stay available; new execution extends this linear history. The original
 running session is replaced. This is an at-least-once restart of read-only

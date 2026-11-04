@@ -51,6 +51,7 @@ class WeatherMachinesCoverageTest {
                 }
             }
             val coverage = reports.reduce { a, b -> a.merge(b) }
+            coverage.assertTransitionsCovered()
             val chart = CitySearchMachine.create().chart
             val observed =
                 coverage.transitions.covered

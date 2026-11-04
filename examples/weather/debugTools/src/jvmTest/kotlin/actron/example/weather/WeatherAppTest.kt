@@ -56,7 +56,8 @@ class WeatherAppTest {
             onNodeWithTag("history-entry-1").performClick()
             onNodeWithTag("history-graph-tab").performClick()
             onNodeWithTag("machine-graph").assertContentDescriptionContains("Idle", substring = true)
-            onNodeWithTag("history-entry-3").performClick()
+            // ChangeQuery and its automatic choice are one recorded decision.
+            onNodeWithTag("history-entry-2").performClick()
             onNodeWithTag("machine-graph").assertContentDescriptionContains("Debouncing", substring = true)
             onNodeWithTag("history-live").performClick()
             onNodeWithTag("city-Lisbon").performClick()

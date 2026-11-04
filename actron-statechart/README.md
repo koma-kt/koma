@@ -310,7 +310,8 @@ charts retain `TransitionStructure.Explicit` and their existing coverage interpr
 results pass through the queue and are checked against their activation before replacing the
 whole state, so an obsolete coroutine cannot overwrite a newer snapshot. Resume restarts only
 unfinished entry bodies; history replay performs no I/O. Arbitrary Kotlin conditions do not
-declare a complete static reachable graph. See the [Weather example](../examples/weather/docs/architecture.md).
+declare a complete static reachable graph. Weather search now uses declared transitions; its other
+features still demonstrate behavior handlers. See the [Weather example](../examples/weather/docs/architecture.md).
 
 ## Replay-ready machine
 
@@ -672,6 +673,55 @@ recovery policy. Weather demonstrates ordinary checkpoint restoration without de
 - A failed decision commits no state or effects. Command failures return as machine inputs.
 - In a hook, avoid naming surrounding parameters `context`, which shadows the hook's context.
 
+## Declaring a transition with one target type
+
+`typedStateMachine` also accepts a rule declaration inside `on<Action>`:
+
+```kotlin
+state<RequestState.Loading> {
+    on<CitySearchAction.Found> {
+        guard { action -> action.revision == state.revision }
+        target { action -> RequestState.Success(value = action.results) }
+        update { action -> state.copy(query = state.query.trim(), revision = state.revision + 1) }
+    }
+    after(delay = 8.seconds, transition = {
+        target { RequestState.Error(cause = RequestFailure.Timeout) }
+    })
+}
+```
+
+`target`'s inferred Kotlin return type declares the graph destination without executing its
+factory. A target with several constructor arguments uses the same syntax. The returned type
+must identify a declared state, and the returned value must have that exact runtime class.
+`guard` and `update` are optional; each block may be declared only once. A missing `target`
+is a definition error. An omitted guard creates an unconditional edge, not a synthetic guard
+with an impossible false-coverage obligation.
+
+For shared data, use the existing `readState = { it.phase }` and
+`writeState = { state, phase -> state.copy(phase = phase) }` binding. `update` may change the
+other fields but must preserve the selected phase (including its payload). The writer installs
+the target value; the machine validates the resulting phase against its active graph node.
+
+Declaration bodies run once at machine construction. Callback bodies run during decisions:
+guard before exits, target and update after exits, then entry hooks. Target and update both read
+the same pre-update context: target does not read the result of update. This preserves existing
+exit → effect → enter semantics. Keep callbacks pure and contexts immutable; time-dependent
+payloads should come from explicit action/context data. No IO or coroutine is started by a rule.
+Failure rolls back the decision, and a rejected guard never calls target or update.
+
+`always(transition = { ... })` declares a conditional eventless transition; it settles in the
+same decision. `after(delay = ..., transition = { ... })` declares an activation-owned timer;
+exit cancels it and a self-transition restarts it. Checkpoints retain its remaining duration.
+Both use the same `guard / target / update` blocks (their unused input is `Unit`).
+The same declarations feed graph export, decision explanations and guard-outcome coverage.
+They describe structure; arbitrary Kotlin predicates are not statically proven reachable.
+The previous typed `after<Target>(delay) { ... }` overload is replaced by this declaration;
+other typed operations and the behavior DSL remain available.
+
+The complete [city search machine](../examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt)
+uses these rules for edits, results, debounce and timeout; `CitySearchGraphTest` checks the graph,
+guard outcomes and restored deadlines.
+
 ## State types shared by graph, UI and recordings
 
 When the complete screen state is one value, no context binding is needed:
@@ -714,7 +764,7 @@ val machine = typedStateMachine<Context, Phase, Act, Command, Ev>(
     state<Phase.Loading> {
         onEnter { command(Command.Fetch(context.query)) }
         on<Act.Loaded, Phase.Results> { _, action -> Phase.Results(action.items) }
-        after<Phase.Idle>(8.seconds) { Phase.Idle }
+        after(delay = 8.seconds) { target { Phase.Idle } }
     }
     state<Phase.Results>()
 }
@@ -815,7 +865,7 @@ Use `transitions { ... }` inside a compound for the full state handler API.
 Factory-backed targets use `on<Action, Target>()`, or
 `transition<Action, Target>(guard = { context, action -> ... }, reduce = { context, action -> ... })`.
 `afterEnter<Target>(delay)` uses the target entry factory after a timer. The existing
-`on<Action, Target> { context, action -> Target(...) }` and `after<Target>(delay) { ... }`
+`on<Action, Target> { context, action -> Target(...) }` and `after(delay) { target { ... } }`
 remain available for flat states without entry factories. Mixing both ways of supplying a
 target value is rejected at definition time, rather than silently overwriting the supplied data.
 

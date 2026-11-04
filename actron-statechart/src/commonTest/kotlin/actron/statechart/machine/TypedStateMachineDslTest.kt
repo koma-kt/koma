@@ -55,7 +55,7 @@ class TypedStateMachineDslTest {
             state<Phase.Loading> {
                 onEnter { command("${context.phase}:${context.query}") }
                 on<Input.Loaded, Phase.Results> { _, action -> Phase.Results(action.value) }
-                after<Phase.Empty>(2.seconds) { Phase.Empty }
+                after(delay = 2.seconds) { target { Phase.Empty } }
             }
             state<Phase.Results>()
         }

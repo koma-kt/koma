@@ -50,7 +50,7 @@ class ParallelStateMachineDslTest {
                     onEnter { command("left") }
                     on<Input.LeftDone, Phase.Ready> { _, action -> Phase.Ready(action.value) }
                     on<Input.RetryLeft, Phase.Loading> { _, _ -> Phase.Loading }
-                    after<Phase.Timeout>(2.seconds) { Phase.Timeout }
+                    after(delay = 2.seconds) { target { Phase.Timeout } }
                 }
                 state<Phase.Ready>()
                 state<Phase.Timeout>()
@@ -60,7 +60,7 @@ class ParallelStateMachineDslTest {
                 state<Phase.Loading> {
                     onEnter { command("right") }
                     on<Input.RightDone, Phase.Ready> { _, action -> Phase.Ready(action.value) }
-                    after<Phase.Timeout>(5.seconds) { Phase.Timeout }
+                    after(delay = 5.seconds) { target { Phase.Timeout } }
                 }
                 state<Phase.Ready>()
                 state<Phase.Timeout>()

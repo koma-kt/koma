@@ -508,3 +508,13 @@ entry outcomes. Weather's five machines use this API. See
 The owner's readonly-state refinement makes both behavior scopes expose the complete immutable
 `val state`. All replacements use `transitionTo(state = ...)`; `phaseOf` selects graph identity
 without a public write lens. Weather uses full state snapshots and explicit phase fields.
+
+### 2026-11-04: inferred targets in typed transition declarations
+
+The fork's typed machine DSL now accepts `on<Action> { guard; target; update }`,
+`always(transition = ...)` and `after(delay, transition = ...)`. The target factory's reified
+return type is the graph destination. The old typed `after<Target>` overload is replaced by the declaration form;
+no pre-release DSL compatibility shim is retained. The StateChart executor is unchanged. No core, recording format or release version changes.
+Weather city-search v13 migrates to declared edges and chart timers: QueryChanged settles
+inside an edit decision, and checkpoints retain debounce/timeout deadlines. Its definition
+version changes because v12 checkpoints describe different work and transitions.

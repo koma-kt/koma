@@ -138,4 +138,4 @@ It also cannot write store state. Timers, lane policies, checkpoint identities a
 work identically with both handler APIs.
 
 See the [actual search machine](../../examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt)
-and [parallel weather machine](../../examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/weather/presentation/CityWeatherMachine.kt).
+and [Weather machine composition](../../examples/weather/shared/src/commonMain/kotlin/actron/example/weather/app/WeatherMachines.kt).
