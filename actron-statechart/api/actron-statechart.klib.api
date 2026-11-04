@@ -177,6 +177,17 @@ final enum class actron.statechart/TransitionKind : kotlin/Enum<actron.statechar
     final fun values(): kotlin/Array<actron.statechart/TransitionKind> // actron.statechart/TransitionKind.values|values#static(){}[0]
 }
 
+final enum class actron.statechart/TransitionStructure : kotlin/Enum<actron.statechart/TransitionStructure> { // actron.statechart/TransitionStructure|null[0]
+    enum entry Conservative // actron.statechart/TransitionStructure.Conservative|null[0]
+    enum entry Explicit // actron.statechart/TransitionStructure.Explicit|null[0]
+
+    final val entries // actron.statechart/TransitionStructure.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<actron.statechart/TransitionStructure> // actron.statechart/TransitionStructure.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): actron.statechart/TransitionStructure // actron.statechart/TransitionStructure.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<actron.statechart/TransitionStructure> // actron.statechart/TransitionStructure.values|values#static(){}[0]
+}
+
 abstract fun interface <#A: in actron.core/Action> actron.statechart.machine/ResultSink { // actron.statechart.machine/ResultSink|null[0]
     abstract fun result(#A) // actron.statechart.machine/ResultSink.result|result(1:0){}[0]
 }
@@ -389,13 +400,16 @@ sealed interface <#A: out actron.core/Action> actron.statechart.machine/EntryOut
     }
 
     final class <#A1: kotlin/Any> Transition : actron.statechart.machine/EntryOutput<kotlin/Nothing> { // actron.statechart.machine/EntryOutput.Transition|null[0]
-        constructor <init>(#A1) // actron.statechart.machine/EntryOutput.Transition.<init>|<init>(1:0){}[0]
+        constructor <init>(#A1, #A1) // actron.statechart.machine/EntryOutput.Transition.<init>|<init>(1:0;1:0){}[0]
 
         final val context // actron.statechart.machine/EntryOutput.Transition.context|{}context[0]
             final fun <get-context>(): #A1 // actron.statechart.machine/EntryOutput.Transition.context.<get-context>|<get-context>(){}[0]
+        final val expectedContext // actron.statechart.machine/EntryOutput.Transition.expectedContext|{}expectedContext[0]
+            final fun <get-expectedContext>(): #A1 // actron.statechart.machine/EntryOutput.Transition.expectedContext.<get-expectedContext>|<get-expectedContext>(){}[0]
 
         final fun component1(): #A1 // actron.statechart.machine/EntryOutput.Transition.component1|component1(){}[0]
-        final fun copy(#A1 = ...): actron.statechart.machine/EntryOutput.Transition<#A1> // actron.statechart.machine/EntryOutput.Transition.copy|copy(1:0){}[0]
+        final fun component2(): #A1 // actron.statechart.machine/EntryOutput.Transition.component2|component2(){}[0]
+        final fun copy(#A1 = ..., #A1 = ...): actron.statechart.machine/EntryOutput.Transition<#A1> // actron.statechart.machine/EntryOutput.Transition.copy|copy(1:0;1:0){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart.machine/EntryOutput.Transition.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // actron.statechart.machine/EntryOutput.Transition.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // actron.statechart.machine/EntryOutput.Transition.toString|toString(){}[0]
@@ -2082,6 +2096,7 @@ final class <#A: kotlin/Any, #B: actron.core/Action, #C: kotlin/Any, #D: actron.
         final fun <get-state>(): #A // actron.statechart.machine/BehaviorEntryScope.state.<get-state>|<get-state>(){}[0]
 
     final suspend fun command(#C) // actron.statechart.machine/BehaviorEntryScope.command|command(1:2){}[0]
+    final suspend fun dispatch(#B) // actron.statechart.machine/BehaviorEntryScope.dispatch|dispatch(1:1){}[0]
     final suspend fun event(#D) // actron.statechart.machine/BehaviorEntryScope.event|event(1:3){}[0]
     final suspend fun transitionTo(#A) // actron.statechart.machine/BehaviorEntryScope.transitionTo|transitionTo(1:0){}[0]
 }
@@ -2202,11 +2217,14 @@ final class <#A: kotlin/Any, #B: actron.core/Event> actron.statechart.machine/Be
 
     final fun event(#B) // actron.statechart.machine/BehaviorActionScope.event|event(1:1){}[0]
     final fun transitionTo(#A) // actron.statechart.machine/BehaviorActionScope.transitionTo|transitionTo(1:0){}[0]
+    final fun updateState(#A) // actron.statechart.machine/BehaviorActionScope.updateState|updateState(1:0){}[0]
 }
 
 final class <#A: kotlin/Any, #B: kotlin/Any, #C: actron.core/Action, #D: kotlin/Any, #E: actron.core/Event> actron.statechart.machine/BehaviorMachineBuilder { // actron.statechart.machine/BehaviorMachineBuilder|null[0]
     final fun register(kotlin.reflect/KClass<out #B>, kotlin/Function1<actron.statechart.machine/BehaviorStateBuilder<#A, #C, #D, #E>, kotlin/Unit>) // actron.statechart.machine/BehaviorMachineBuilder.register|register(kotlin.reflect.KClass<out|1:1>;kotlin.Function1<actron.statechart.machine.BehaviorStateBuilder<1:0,1:2,1:3,1:4>,kotlin.Unit>){}[0]
+    final fun registerCommon(kotlin/Function1<actron.statechart.machine/BehaviorStateBuilder<#A, #C, #D, #E>, kotlin/Unit>) // actron.statechart.machine/BehaviorMachineBuilder.registerCommon|registerCommon(kotlin.Function1<actron.statechart.machine.BehaviorStateBuilder<1:0,1:2,1:3,1:4>,kotlin.Unit>){}[0]
     final inline fun <#A1: reified #B> state(noinline kotlin/Function1<actron.statechart.machine/BehaviorStateBuilder<#A, #C, #D, #E>, kotlin/Unit> = ...) // actron.statechart.machine/BehaviorMachineBuilder.state|state(kotlin.Function1<actron.statechart.machine.BehaviorStateBuilder<1:0,1:2,1:3,1:4>,kotlin.Unit>){0§<1:1>}[0]
+    final inline fun <#A1: reified #C> on(noinline kotlin/Function2<actron.statechart.machine/BehaviorActionScope<#A, #E>, #A1, kotlin/Unit>) // actron.statechart.machine/BehaviorMachineBuilder.on|on(kotlin.Function2<actron.statechart.machine.BehaviorActionScope<1:0,1:4>,0:0,kotlin.Unit>){0§<1:2>}[0]
 }
 
 final class <#A: kotlin/Any, #B: kotlin/Any, #C: actron.core/Action, #D: kotlin/Any, #E: actron.core/Event> actron.statechart.machine/TypedCompoundMachineBuilder : actron.statechart.machine/TypedStateMachineBuilder<#A, #B, #C, #D, #E> { // actron.statechart.machine/TypedCompoundMachineBuilder|null[0]
@@ -3746,7 +3764,7 @@ final class actron.statechart/StateChartBuilder { // actron.statechart/StateChar
 }
 
 final class actron.statechart/StateChartDefinition { // actron.statechart/StateChartDefinition|null[0]
-    constructor <init>(actron.statechart/StateId, kotlin.collections/List<actron.statechart/StateNode>, kotlin.collections/List<actron.statechart/Transition>) // actron.statechart/StateChartDefinition.<init>|<init>(actron.statechart.StateId;kotlin.collections.List<actron.statechart.StateNode>;kotlin.collections.List<actron.statechart.Transition>){}[0]
+    constructor <init>(actron.statechart/StateId, kotlin.collections/List<actron.statechart/StateNode>, kotlin.collections/List<actron.statechart/Transition>, actron.statechart/TransitionStructure = ...) // actron.statechart/StateChartDefinition.<init>|<init>(actron.statechart.StateId;kotlin.collections.List<actron.statechart.StateNode>;kotlin.collections.List<actron.statechart.Transition>;actron.statechart.TransitionStructure){}[0]
 
     final val diagnostics // actron.statechart/StateChartDefinition.diagnostics|{}diagnostics[0]
         final fun <get-diagnostics>(): kotlin.collections/List<actron.statechart/GraphDiagnostic> // actron.statechart/StateChartDefinition.diagnostics.<get-diagnostics>|<get-diagnostics>(){}[0]
@@ -3754,6 +3772,8 @@ final class actron.statechart/StateChartDefinition { // actron.statechart/StateC
         final fun <get-initial>(): actron.statechart/StateId // actron.statechart/StateChartDefinition.initial.<get-initial>|<get-initial>(){}[0]
     final val states // actron.statechart/StateChartDefinition.states|{}states[0]
         final fun <get-states>(): kotlin.collections/List<actron.statechart/StateNode> // actron.statechart/StateChartDefinition.states.<get-states>|<get-states>(){}[0]
+    final val transitionStructure // actron.statechart/StateChartDefinition.transitionStructure|{}transitionStructure[0]
+        final fun <get-transitionStructure>(): actron.statechart/TransitionStructure // actron.statechart/StateChartDefinition.transitionStructure.<get-transitionStructure>|<get-transitionStructure>(){}[0]
     final val transitions // actron.statechart/StateChartDefinition.transitions|{}transitions[0]
         final fun <get-transitions>(): kotlin.collections/List<actron.statechart/Transition> // actron.statechart/StateChartDefinition.transitions.<get-transitions>|<get-transitions>(){}[0]
 
@@ -3762,9 +3782,10 @@ final class actron.statechart/StateChartDefinition { // actron.statechart/StateC
     final fun component1(): actron.statechart/StateId // actron.statechart/StateChartDefinition.component1|component1(){}[0]
     final fun component2(): kotlin.collections/List<actron.statechart/StateNode> // actron.statechart/StateChartDefinition.component2|component2(){}[0]
     final fun component3(): kotlin.collections/List<actron.statechart/Transition> // actron.statechart/StateChartDefinition.component3|component3(){}[0]
+    final fun component4(): actron.statechart/TransitionStructure // actron.statechart/StateChartDefinition.component4|component4(){}[0]
     final fun configurationOf(actron.statechart/StateId): actron.statechart/StateConfiguration // actron.statechart/StateChartDefinition.configurationOf|configurationOf(actron.statechart.StateId){}[0]
     final fun configurationOf(kotlin.collections/Collection<actron.statechart/StateId>): actron.statechart/StateConfiguration // actron.statechart/StateChartDefinition.configurationOf|configurationOf(kotlin.collections.Collection<actron.statechart.StateId>){}[0]
-    final fun copy(actron.statechart/StateId = ..., kotlin.collections/List<actron.statechart/StateNode> = ..., kotlin.collections/List<actron.statechart/Transition> = ...): actron.statechart/StateChartDefinition // actron.statechart/StateChartDefinition.copy|copy(actron.statechart.StateId;kotlin.collections.List<actron.statechart.StateNode>;kotlin.collections.List<actron.statechart.Transition>){}[0]
+    final fun copy(actron.statechart/StateId = ..., kotlin.collections/List<actron.statechart/StateNode> = ..., kotlin.collections/List<actron.statechart/Transition> = ..., actron.statechart/TransitionStructure = ...): actron.statechart/StateChartDefinition // actron.statechart/StateChartDefinition.copy|copy(actron.statechart.StateId;kotlin.collections.List<actron.statechart.StateNode>;kotlin.collections.List<actron.statechart.Transition>;actron.statechart.TransitionStructure){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // actron.statechart/StateChartDefinition.equals|equals(kotlin.Any?){}[0]
     final fun hasNode(actron.statechart/StateId): kotlin/Boolean // actron.statechart/StateChartDefinition.hasNode|hasNode(actron.statechart.StateId){}[0]
     final fun hashCode(): kotlin/Int // actron.statechart/StateChartDefinition.hashCode|hashCode(){}[0]

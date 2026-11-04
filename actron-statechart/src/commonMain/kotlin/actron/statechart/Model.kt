@@ -319,6 +319,12 @@ data class Transition(
     val isTimer: Boolean get() = trigger is Trigger.After
 }
 
+/** Whether edges declare behavior or only bound dynamically chosen destinations. */
+enum class TransitionStructure {
+    Explicit,
+    Conservative,
+}
+
 /**
  * Immutable description of a statechart: its states, its initial state and its transitions.
  *
@@ -339,6 +345,7 @@ data class StateChartDefinition(
     val initial: StateId,
     val states: List<StateNode>,
     val transitions: List<Transition>,
+    val transitionStructure: TransitionStructure = TransitionStructure.Explicit,
 ) {
     /** Cached static diagnostics, evaluated automatically when inspected. No application code is executed. */
     val diagnostics: List<GraphDiagnostic> by lazy { diagnose() }

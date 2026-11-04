@@ -39,6 +39,17 @@ class BehaviorMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E : Event>
 ) {
     private val states = linkedMapOf<KClass<out S>, StateId>()
     private val implementation = MachineBuilder<C, A, CMD, E>()
+    private val commonHandlers = mutableListOf<BehaviorStateBuilder<C, A, CMD, E>.() -> Unit>()
+
+    /** Fallback for every state; local handlers always take priority. */
+    inline fun <reified T : A> on(noinline block: BehaviorActionScope<C, E>.(T) -> Unit) {
+        registerCommon { on<T>(block) }
+    }
+
+    @PublishedApi
+    internal fun registerCommon(block: BehaviorStateBuilder<C, A, CMD, E>.() -> Unit) {
+        commonHandlers += block
+    }
 
     inline fun <reified T : S> state(noinline build: BehaviorStateBuilder<C, A, CMD, E>.() -> Unit = {}) {
         register(type = T::class, build = build)
@@ -62,6 +73,10 @@ class BehaviorMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E : Event>
         version: DefinitionVersion,
         initial: S,
     ): Machine<C, A, CMD, E> {
+        for (source in states.values) {
+            val builder = BehaviorStateBuilder(source = source, implementation = implementation, target = ::target)
+            for (handler in commonHandlers) builder.handler()
+        }
         // Kotlin handlers choose their target at execution time. These guarded edges are the
         // conservative structural envelope, not a claim that every edge is reachable.
         val transitions =
@@ -72,7 +87,7 @@ class BehaviorMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E : Event>
                     Transition(source = source, target = target, trigger = Trigger.OnAction(matcher = ActionMatcher.of<BehaviorTransition>(name = "transitionTo")), guard = GuardKey(name = key))
                 }
             }
-        val chart = StateChartDefinition(initial = states.getValue(key = initial::class), states = states.values.map { AtomicState(id = it) }, transitions = transitions)
+        val chart = StateChartDefinition(initial = states.getValue(key = initial::class), states = states.values.map { AtomicState(id = it) }, transitions = transitions, transitionStructure = actron.statechart.TransitionStructure.Conservative)
         return Machine(id = id, version = version, chart = chart, config = implementation)
     }
 }
@@ -124,21 +139,37 @@ class BehaviorStateBuilder<C : Any, A : Action, CMD : Any, E : Event>
                         native.requestTransition(target = this@BehaviorStateBuilder.target(next))
                         native.context = next
                     },
+                    update = { next ->
+                        require(this@BehaviorStateBuilder.target(next) == this@BehaviorStateBuilder.source) { "updateState must preserve the phase; use transitionTo to change it" }
+                        native.context = next
+                    },
                     emit = { event -> native.event(event = event) },
                 ).block(action)
             })
         }
     }
 
-/** An action reads its original immutable snapshot; only transitionTo proposes a replacement. */
+/** An action reads its original immutable snapshot and proposes at most one replacement. */
 @ActronStoreDsl
 class BehaviorActionScope<C : Any, E : Event> internal constructor(
     val state: C,
     val now: MachineTime,
     private val move: (C) -> Unit,
+    private val update: (C) -> Unit,
     private val emit: (E) -> Unit,
 ) {
-    fun transitionTo(state: C) = move(state)
+    private var proposed = false
+
+    fun transitionTo(state: C) = propose { move(state) }
+
+    /** Replaces data without exiting the phase or restarting its work. */
+    fun updateState(state: C) = propose { update(state) }
+
+    private inline fun propose(block: () -> Unit) {
+        check(!proposed) { "An action handler can propose only one state change" }
+        proposed = true
+        block()
+    }
 
     fun event(event: E) = emit(event)
 }
@@ -169,7 +200,13 @@ class BehaviorEntryScope<C : Any, A : Action, CMD : Any, E : Event> internal con
 ) {
     suspend fun transitionTo(state: C) {
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
-        publish(EntryOutput.Transition(context = state))
+        publish(EntryOutput.Transition(context = state, expectedContext = this.state))
+    }
+
+    /** Applies a result to the current snapshot through a state-owned queued action. */
+    suspend fun dispatch(action: A) {
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        publish(EntryOutput.Dispatch(action = action))
     }
 
     suspend fun command(command: CMD) = execute(command)

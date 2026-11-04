@@ -55,3 +55,22 @@ because it embeds recording JSON. Machine definition versions change where behav
   `checkDebugGraph` passed without expanding baselines.
 - Review added entry-output codec round trips and reproduced an opaque JSON-null context
   failure before fixing it. Explicit null payloads now remain distinct from missing fields.
+
+## Messenger-oriented updates (2026-11-04)
+
+Action handlers now offer `updateState` for a complete same-phase replacement without
+exit/re-entry. They still read one immutable snapshot and propose at most one change.
+Shared machine-level `on` handlers are fallbacks after all local handlers.
+
+Entry subscriptions use activation-scoped `dispatch` to reduce results against current
+state. Direct entry replacements carry their expected context; the decision rejects a
+replacement when that context differs from current state. Equality is value equality,
+not an assertion that no intervening events occurred. Entries remain scoped by activation.
+Unfinished entries resume from the saved current context; replay evaluates recorded
+expected contexts without running I/O.
+
+Recording JSON version 8 adds required `entryExpectedContext` for transition results.
+Following the unreleased API baseline, version 7 is rejected; no migration is implied.
+Binary framing is unchanged, but its header embeds recording version 8.
+Behavior graphs explicitly carry conservative transition structure and the inspector
+labels unobserved potential edges without claiming they are reachable.

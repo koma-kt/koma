@@ -277,10 +277,27 @@ private fun <C : Any, A : Action, E : Event> InputWire.readEntryOutput(
         return value
     }
     return when (entryKind.required("entry result without kind", at).text(at, json)) {
-        "completed" -> EntryOutput.Completed
-        "dispatch" -> EntryOutput.Dispatch(action = action())
-        "transition" -> EntryOutput.Transition(context = json.decodeFromJsonElement(contextSerializer, payload("entryContext", entryContext)))
-        "event" -> EntryOutput.Emit(event = json.decodeFromJsonElement(eventSerializer, payload("entryEvent", entryEvent)))
-        else -> throw DecodeFailure("unknown entry output", at)
+        "completed" -> {
+            EntryOutput.Completed
+        }
+
+        "dispatch" -> {
+            EntryOutput.Dispatch(action = action())
+        }
+
+        "transition" -> {
+            EntryOutput.Transition(
+                context = json.decodeFromJsonElement(contextSerializer, payload("entryContext", entryContext)),
+                expectedContext = json.decodeFromJsonElement(contextSerializer, payload("entryExpectedContext", entryExpectedContext)),
+            )
+        }
+
+        "event" -> {
+            EntryOutput.Emit(event = json.decodeFromJsonElement(eventSerializer, payload("entryEvent", entryEvent)))
+        }
+
+        else -> {
+            throw DecodeFailure("unknown entry output", at)
+        }
     }
 }

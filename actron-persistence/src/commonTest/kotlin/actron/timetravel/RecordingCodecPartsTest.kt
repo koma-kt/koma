@@ -35,7 +35,7 @@ class RecordingCodecPartsTest {
 
     @Test
     fun everyEntryOutcomeRoundTripsThroughTheStepCodec() {
-        val outputs: List<EntryOutput<Tick>> = listOf(EntryOutput.Completed, EntryOutput.Dispatch(Tick), EntryOutput.Transition(7), EntryOutput.Emit(Empty))
+        val outputs: List<EntryOutput<Tick>> = listOf(EntryOutput.Completed, EntryOutput.Dispatch(Tick), EntryOutput.Transition(context = 7, expectedContext = 3), EntryOutput.Emit(Empty))
         outputs.forEach { output ->
             val step = RecordedStep.Ignored<Int, Tick, String, Empty>(MachineInput.EntryResult(ActivationId(1), output, MachineTime.Zero), IgnoreReason.StaleCommand)
             assertEquals(step, codec.decodeStep(codec.encodeStep(step), definition, version))
@@ -54,9 +54,11 @@ class RecordingCodecPartsTest {
                 }
             }
         val opaque = RecordingCodec(serializer, Tick.serializer(), String.serializer(), Empty.serializer())
-        val step = RecordedStep.Ignored<Int, Tick, String, Empty>(MachineInput.EntryResult(ActivationId(1), EntryOutput.Transition(7), MachineTime.Zero), IgnoreReason.StaleCommand)
+        val step = RecordedStep.Ignored<Int, Tick, String, Empty>(MachineInput.EntryResult(ActivationId(1), EntryOutput.Transition(context = 7, expectedContext = 7), MachineTime.Zero), IgnoreReason.StaleCommand)
         val saved = opaque.encodeStep(step)
         assertTrue(saved.contains("\"entryContext\":null"))
+        assertTrue(saved.contains("\"entryExpectedContext\":null"))
+        assertFailsWith<IllegalArgumentException> { opaque.decodeStep(saved.replace(",\"entryExpectedContext\":null", ""), definition, version) }
         assertEquals(step, opaque.decodeStep(saved, definition, version))
         assertFailsWith<IllegalArgumentException> { opaque.decodeStep(saved.replace(",\"entryContext\":null", ""), definition, version) }
     }
@@ -91,7 +93,7 @@ class RecordingCodecPartsTest {
     fun malformedCheckpointJsonKeepsThePublicFormatErrorWithoutAnInternalCause() {
         val error = assertFailsWith<IllegalArgumentException> { codec.decodeCheckpoint("{", definition, version) }
 
-        assertTrue(error.message.orEmpty().startsWith("not a checkpoint of format 7: "))
+        assertTrue(error.message.orEmpty().startsWith("not a checkpoint of format 8: "))
         assertNull(error.cause)
     }
 }

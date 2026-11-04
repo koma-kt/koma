@@ -607,6 +607,7 @@ class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
             }
 
             is EntryOutput.Transition<*> -> {
+                if (snapshot.context != output.expectedContext) return ignored(snapshot, IgnoreReason.StaleCommand)
                 val destination = entryTransitions.getValue(node)(output.context)
                 val step = Step(snapshot, input, input)
                 val result = runtime.stepObserved(snapshot.configuration, snapshot, BehaviorTransition(target = destination.target), observer(trace))

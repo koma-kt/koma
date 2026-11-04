@@ -236,7 +236,8 @@ val transitions = listOf(
 `behaviorStateMachine` offers `state<Phase>`, `on<Action>`, suspend `onEnter`, and
 `transitionTo(state = ...)` on the same decision engine. In both handler scopes, `val state`
 is the complete immutable application snapshot captured at invocation. It has no setter;
-propose every update by passing a complete replacement to `transitionTo`. The scope keeps
+propose a replacement with `transitionTo`, or use `updateState` in an action handler to
+change data while preserving the current phase and its running work. The scope keeps
 reading the original snapshot even after that call. Keep values deeply immutable.
 
 For a wrapper such as `CitySearchState(query, phase, revision)`, supply
@@ -252,6 +253,58 @@ on<CitySearchAction.ChangeQuery> { action ->
     ))
 }
 ```
+
+Declare shared actions with `on<Action>` directly in `behaviorStateMachine` to avoid
+repeating the same handler in every state. A matching state-local handler always wins,
+regardless of whether the shared handler was declared before or after the state.
+Shared handlers are fallbacks, not additional listeners: a local handler that makes no
+transition still consumes the action. Among shared handlers, the first match wins.
+
+```kotlin
+on<CitySearchAction.ChangeQuery> { action ->
+    transitionTo(state = state.copy(
+        query = action.query,
+        revision = state.revision + 1,
+        phase = RequestState.QueryChanged,
+    ))
+}
+state<RequestState.Loading> {
+    // Only loading-specific responses belong here.
+}
+```
+
+For a long-lived subscription, return data as actions and reduce it against the current
+snapshot. `dispatch` is activation-scoped: a result queued after its owner exits is ignored.
+
+```kotlin
+state<ChatPhase.Connected> {
+    onEnter {
+        repository.messages().collect { message ->
+            dispatch(ChatAction.MessageReceived(message))
+        }
+    }
+    on<ChatAction.MessageReceived> { action ->
+        updateState(state = state.copy(messages = state.messages + action.message))
+    }
+}
+```
+
+`updateState` cannot change the phase selected by `phaseOf`. It preserves activation,
+entry work, commands and timers. Each action handler may propose exactly one replacement:
+combining updates or an update with a transition fails atomically. `transitionTo` remains
+an explicit exit/re-entry, even when its target has the same phase type.
+
+An entry's `state` remains its initial snapshot. A direct `transitionTo` from entry work
+is accepted only if the current context still equals that snapshot, as well as matching
+the active entry. Otherwise it is ignored to avoid overwriting newer data. Use `dispatch`
+for results that must merge with current state or choose their destination from it.
+Snapshots must be deeply immutable and have value equality. Replay applies the same
+comparison from recorded input; it does not execute subscription or network code.
+
+Behavior charts carry `TransitionStructure.Conservative`: their edges are potential
+source/target pairs, not proven reachable paths. The inspector labels this explicitly;
+solid edges were observed in the supplied recording, dashed ones were not. Explicit
+charts retain `TransitionStructure.Explicit` and their existing coverage interpretation.
 
 `onEnter` executes outside action processing and is cancelled on state exit. Its transition
 results pass through the queue and are checked against their activation before replacing the

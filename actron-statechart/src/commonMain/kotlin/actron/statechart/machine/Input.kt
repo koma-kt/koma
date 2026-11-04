@@ -134,6 +134,7 @@ enum class AbandonReason {
 sealed interface EntryOutput<out A : Action> {
     data class Transition<C : Any>(
         val context: C,
+        val expectedContext: C,
     ) : EntryOutput<Nothing>
 
     data class Dispatch<out A : Action>(

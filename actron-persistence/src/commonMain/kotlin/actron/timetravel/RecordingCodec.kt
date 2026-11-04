@@ -13,8 +13,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 
-/** Version 7 records state-owned onEnter work and its replayable results. Other versions are rejected. */
-const val RECORDING_FORMAT_VERSION: Int = 7
+/** Version 8 records the expected snapshot for optimistic entry replacements. Other versions are rejected. */
+const val RECORDING_FORMAT_VERSION: Int = 8
 
 /**
  * What [RecordingCodec.decode] found.

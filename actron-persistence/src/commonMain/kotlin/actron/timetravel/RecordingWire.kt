@@ -99,6 +99,7 @@ internal class InputWire(
     val activation: JsonElement = JsonNull,
     val entryKind: JsonElement = JsonNull,
     val entryContext: JsonElement = JsonNull,
+    val entryExpectedContext: JsonElement = JsonNull,
     val entryEvent: JsonElement = JsonNull,
     @Serializable(with = LongWireNode::class) val command: JsonElement = JsonNull,
     @Serializable(with = LongWireNode::class) val timer: JsonElement = JsonNull,

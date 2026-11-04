@@ -64,6 +64,7 @@ import actron.timetravel.compose.resources.outside_window
 import actron.timetravel.compose.resources.pin_comparison
 import actron.timetravel.compose.resources.pin_field
 import actron.timetravel.compose.resources.pinned_field
+import actron.timetravel.compose.resources.potential_transitions_legend
 import actron.timetravel.compose.resources.previous_change
 import actron.timetravel.compose.resources.previous_event
 import actron.timetravel.compose.resources.previous_instance
@@ -144,6 +145,7 @@ internal enum class HistoryText(
     Graph(Res.string.graph),
     Coverage(Res.string.coverage),
     CoverageLegend(Res.string.coverage_legend),
+    PotentialTransitionsLegend(Res.string.potential_transitions_legend),
     Executions(Res.string.executions),
     Transition(Res.string.transition),
     State(Res.string.state),
