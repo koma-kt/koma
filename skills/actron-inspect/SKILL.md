@@ -36,7 +36,7 @@ inspect them locally and avoid putting raw payloads into public issues or logs.
 ## Inspector and artifacts
 
 Read `actron-timetravel-compose/README.md` for history/graph controls. Weather adapts graph data
-and screen restoration in `examples/weather/src/commonMain/kotlin/actron/example/weather/core/debug/`; Decompose navigation remains
+and screen restoration in `examples/weather/debugTools/src/commonMain/kotlin/actron/example/weather/app/debug/`; Decompose navigation remains
 application-owned. Inspect the selected event's graph/configuration rather than live state.
 If available, Weather's graph diagnostic demo modifies a diagram copy only; do not run a
 broken demo definition as the production machine.

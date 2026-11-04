@@ -23,15 +23,33 @@ the signatures in `actron-statechart/src/commonMain/kotlin/actron/statechart/mac
 - Prefer the typed DSL used by Weather's `CitySearchMachine.kt` and `CityWeatherMachine.kt`.
   A direct sealed state can be the complete context. A context-based machine binds its state
   once through read/write functions. Do not maintain a separate phase enum and StateId map.
-- Use parallel regions for independent concurrent lifecycles, not a bag of loading flags.
-  Use hierarchical states for shared behavior/lifetime. Consult existing hierarchy/history/
-  invoke examples before introducing equivalent hand-written coordination.
+- Start with `typedStateMachine<State, Action, Command, Event>` when state is the complete
+  context; use `Nothing` for absent commands/events. Add `readState`/`writeState` only when
+  context also contains shared data. Use `internal<Action>` for data-only updates and
+  `on<Action, Target>` / `transition<Action, Target>` for phase changes.
+- Use parallel regions for concurrent phases within one machine/snapshot. For independently
+  owned features, use separate machines and `MachineGroup` typed member routes. A route maps
+  synchronously and carries zero or one action per event; separate routes provide fan-out.
+  Group members retain separate queues and commits. Weather's `app/WeatherMachines.kt`
+  demonstrates screen/current/hourly/advice composition, not a single parallel machine.
+  Use hierarchical states for shared lifetime and typed invocation for parent-owned children
+  requiring an atomic snapshot. Do not rebuild these contracts with flags or detached jobs.
+- Centralize a shared automatic choice in an `always<Target>` state when appropriate;
+  Weather search routes query edits through `RequestState.QueryChanged`. Automatic steps
+  settle within the decision; do not require the UI to dispatch the next phase.
 - Keep reducers and guards pure. Declare commands in machine hooks and execute use cases in
   command handlers. Results return as typed actions through the Store. Choose command scopes,
   lanes and cancellation policies to match the domain; do not bypass them with detached jobs.
+  Prefer `commandHandler(onFailure = ...)` for one result or `commandHandlers { handle<T> ... }`
+  for several command types. Map service errors to domain actions; cancellation propagates.
+  Use the lower-level `CommandHandler` callback for streams. Registered handler matching is
+  checked at execution time, not compile-time exhaustiveness.
 - A Machine describes behavior; MachineStore owns queued processing. Use the documented
   processing/UI dispatch configuration. A dispatcher pool does not imply a dedicated OS thread.
   Do not mutate published state directly or claim all side effects run on the UI thread.
+- For Decompose, use `retainedMachine` from `actron-decompose`: the keeper owns the Store and
+  command scope, while observation capturing a component belongs to its lifecycle. Do not
+  capture components in retained handlers. Restoration and recording are independent options.
 - Decompose/Android navigation and saved-state integration belong in the application adapter.
   The machine library must not depend on a navigator or an Android lifecycle.
 - Definition IDs, versions and typed-state names participate in persistence. Evaluate version
@@ -44,9 +62,10 @@ under `examples/weather/shared/src/commonMain/kotlin/actron/example/weather/`; i
 show how to connect reusable machines, feature command handlers and UI.
 
 Use the smallest relevant tests and compile targets. New public Kotlin API requires the
-repository's API dump/check workflow. Changes must pass `ktlintCheck` and `checkNullability`;
-this repository deliberately rejects nullable API/state shortcuts. Run `ktlintFormat` before
-`ktlintCheck`, not concurrently. Preserve unrelated working-tree edits.
+repository's API dump/check workflow. Follow `AGENTS.md` for required checks, including the source absence guard
+`./gradlew :nullability-guard:checkPolicy`; `checkNullability` additionally compiles the whole
+project. This repository rejects nullable API/state shortcuts. Format changed Kotlin files
+when needed, then run checks sequentially; do not format unrelated working-tree edits.
 
 Report the resulting state/action/command flow, validation actually run and any behavior
 that remains unverified. A skill does not authorize pushes, merges or deployment.
