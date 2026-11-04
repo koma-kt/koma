@@ -46,13 +46,13 @@ Start with [CitySearchMachine.kt](../shared/src/commonMain/kotlin/actron/example
 | `CitySearchState` | Complete immutable state: query, revision and the current phase |
 | `CitySearchAction` | User edits and typed operation results |
 | `SearchCitiesCommand` | Data describing a search to run; contains no HTTP implementation |
-| `behaviorStateMachine` | Connects the typed request state to the library's graph/runtime |
-| `phaseOf` | Select `state.phase` to identify the graph node |
-| `state<T>` | Declares the transitions/handlers available in that state |
-| `on<Action> { ... }` | Synchronous action handling with ordinary Kotlin conditions |
-| `transitionTo(state = state.copy(...))` | Propose a complete replacement snapshot, including its phase |
-| `onEnter { delay(...) }` | Suspend state-owned work without blocking action processing |
-| `onEnter { command(...) }` | Request work when entering the state; execute it outside the decision |
+| `typedStateMachine` | Builds the search graph and its executable rules together |
+| `readState` / `writeState` | Bind the graph phase to `CitySearchState.phase` |
+| `state<T>` | Declares a graph node and its transitions |
+| `on<Action> { guard; target; update }` | Declares one action edge; destination comes from target's return type |
+| `always(transition = { ... })` | Chooses the next phase without another input |
+| `after(delay = ..., transition = { ... })` | Declares an activation-owned debounce or timeout |
+| `onEnter { command(...) }` | Registers work to execute after the decision commits |
 
 `phase` holds the state value. There is no second handwritten `StateId` field to synchronize.
 The DSL derives graph nodes from state declarations. `RequestState.Success` carries results,
@@ -69,20 +69,21 @@ lane names are structural identifiers, not string keys for guards or effects.
 ### Search, cancellation and late answers
 
 ```text
-Idle → ChangeQuery("Москва") → QueryChanged → onEnter → Debouncing → delay(350 ms) → Loading
-Loading → ChangeQuery("Казань") → QueryChanged → onEnter → Debouncing → delay(350 ms) → Loading
-Any search state → ChangeQuery(" ") → QueryChanged → onEnter → Idle
+Idle → ChangeQuery("Москва") → QueryChanged → always → Debouncing → after(350 ms) → Loading
+Loading → ChangeQuery("Казань") → QueryChanged → always → Debouncing → after(350 ms) → Loading
+Any search state → ChangeQuery(" ") → QueryChanged → always → Idle
 ```
 
-`QueryChanged.onEnter` chooses with a normal Kotlin `if`. The edit updates query/revision once.
-The entry result is a separate queued decision; `QueryChanged` can appear in history and the UI.
+`QueryChanged` tries the blank-query guard first, then an unconditional Debouncing fallback. The edit updates query/revision once.
+The choice settles in the same decision: the history records both edges, and the UI receives
+Idle or Debouncing. `queryChanges()` declares the common edit rule in each stable state.
 
 The second edit updates the query/revision and exits the old `Loading` activation. Its command
 and timeout are cancelled immediately, before the next debounce expires. Further edits restart
 the debounce. Clearing enters `Idle`, with no pending search and no displayed results.
 
 The new `Loading.onEnter` executes the request through the existing command handler.
-`withTimeoutOrNull` bounds this coroutine; state exit cancels it and the repository request. Timeout enters `Error(cause = RequestFailure.Timeout)`. Request failure uses the same Error state with an Unavailable cause; the UI offers the same retry action.
+`after(8.seconds)` declares the timeout edge; state exit cancels the timer and repository request. Timeout enters `Error(cause = RequestFailure.Timeout)`. Request failure uses the same Error state with an Unavailable cause; the UI offers the same retry action.
 Cancellation propagates through the command handler to the suspending repository/HTTP call;
 `commandHandler` rethrows cancellation instead of converting it into `Failed`.
 
@@ -169,8 +170,8 @@ The host supplies field projections and a `WeatherHistoryFrame`; Actron does not
 Selecting a history entry renders its saved data without running commands. Continuing from a
 resumable live entry calls the root's `continueFrom`: it replaces the Decompose children and
 recreates executors from their checkpoints. Pending read requests restart; completed reads stay
-completed. Restoring during debounce starts a fresh 350 ms delay;
-a restarted HTTP request receives a new timeout. This does not restore a suspended call stack or
+completed. Search v13 preserves the remaining debounce and request-timeout duration.
+The other weather machines still restart their unfinished entry bodies and timeout on resume. This does not restore a suspended call stack or
 guarantee exactly-once external side effects. Later history is removed after successful continuation.
 
 [WeatherSavedState.kt](../shared/src/commonMain/kotlin/actron/example/weather/app/session/WeatherSavedState.kt)
@@ -283,32 +284,21 @@ host recreation or continuation. Destroying the keeper closes the Store and canc
 A single `actron-decompose` module exposes the standard machine/Store integration. It depends
 on core/statechart and Decompose, and has no time-travel, persistence-codec or Compose dependency.
 
-## Compact DSL and diagnostics
+## Declared search transitions and behavior handlers
 
-`behaviorStateMachine` uses the same StateChart decision engine, immutable snapshots and queued
-executor as the explicit chart DSL. `on` reads its original full `val state` synchronously and exactly once; it proposes
-changes only through `transitionTo(state = state.copy(...))`. `onEnter` runs in a
-state-owned coroutine outside processing; leaving or re-entering the state cancels its old job.
-Queued results carry activation identity, so obsolete work cannot update the replacement state.
-`delay` suspends only that coroutine. Blocking libraries still need `withContext(Dispatchers.IO)`
-or another suitable caller-owned dispatcher.
+Search v13 uses `typedStateMachine` with `guard / target / update` declarations. Its eleven
+edges include actions, two automatic choices and two timers. The graph is available before
+execution; rejected and accepted guards are recorded by the same engine that chooses transitions.
+`target` infers the destination type from its factory, so Success is not written twice.
+Target and update read the same context before the update; only target owns the phase.
 
-Both scopes expose a read-only full `state`; it remains the original snapshot after a transition
-request. `phaseOf` selects the graph node from each replacement. There is no public write lens or
-mutable context in this DSL. `command`
-executes the existing request handler in that entry coroutine; results pass back through the
-machine queue. Weather waits for cancellation after request delivery so a rejected response
-still leaves the timeout active. Expected errors are typed actions; unexpected exceptions reach
-the Store error handler. Scope cancellation is never converted to an error state.
+This changes search continuation from v12: debounce and timeout retain their remaining delay,
+and QueryChanged settles within the edit decision instead of publishing a separate entry result.
+Definition version 13 deliberately rejects v12 checkpoints/recordings; no format version changes.
+HTTP remains restartable read work, not a saved coroutine stack. `CitySearchGraphTest` verifies
+restoration, graph edges and both outcomes of response guards.
 
-Kotlin conditions inside handlers cannot be statically enumerated. The underlying chart contains
-a conservative source/target envelope, not a claim that every edge is reachable. Actual decisions,
-activation changes and observed transition coverage remain available. Full declared-edge coverage
-and guard-removal mutations belong to the explicit graph DSL. Weather uses real executor tests,
-virtual time and finite schedule exploration for these behavior checks.
-
-Pending entry identities are persisted. Continue here restarts unfinished entry bodies from their
-beginning, using saved context; completed bodies stay completed. Debounce duration belongs to
-the entry coroutine, so no deadline is stored in feature state. History replay applies recorded
-entry outcomes without executing coroutines or I/O. Requests must tolerate re-execution; exactly-once
-external effects and suspended Kotlin call-stack restoration are not promised.
+Other Weather features retain `behaviorStateMachine`, suspend `onEnter` and complete-snapshot
+`transitionTo`. Those handlers support ordinary Kotlin control flow and use a conservative graph
+envelope. Their unfinished entry work restarts from the beginning on continuation. Both APIs use
+the same StateChart engine, immutable snapshots, command handling and queued Store.

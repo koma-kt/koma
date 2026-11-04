@@ -152,11 +152,11 @@ feature's behaviour.
 | Shape | Example | Actron representation |
 |---|---|---|
 | One state with changing data | A counter or an editable form | `behaviorStateMachine`, `on<Action>` and `transitionTo` |
-| Flat, mutually exclusive phases | Idle → Loading → Content or Error | `behaviorStateMachine`; `phaseOf` selects the phase from shared context |
+| Flat, mutually exclusive phases | Idle → Loading → Content or Error | `typedStateMachine`; `on<Action> { target { ... } }` declares each graph edge |
 | Hierarchical phases | Connected contains Idle and ChatOpen | `compound<Parent>`; one active child at a time |
 | Parallel phases | Connection status and upload status evolve independently | `parallelStateMachine` regions, or nested `parallel<Parent>` |
 | Return to a previous substate | Resume an interrupted multi-step editor | `history()` / `history(deep = true)` and `onHistory<Action, Parent>()` |
-| Timed work | Debounce or request timeout | Suspend `onEnter` with coroutine delay/timeout; explicit charts also offer `after<Target>` |
+| Timed work | Debounce or request timeout | Suspend `onEnter` with coroutine delay/timeout; explicit charts also offer `after(delay) { target { ... } }` |
 
 Keep changing data such as queries and counters in context fields. Use distinct states when
 allowed actions or work lifetimes change. The typed DSL derives graph IDs from state types;
@@ -164,6 +164,25 @@ there is no separate phase-to-ID map. See the [typed DSL guide](actron-statechar
 for explicit graph declarations, shared context bindings, hierarchy and history.
 `typedStateMachine` remains useful when static transition structure is part of the model;
 behavior handlers use ordinary Kotlin and expose a conservative graph of possible targets.
+
+Declare a destination once, with an optional condition and context update:
+
+```kotlin
+state<RequestState.Loading> {
+    on<CitySearchAction.Found> {
+        guard { action -> action.revision == state.revision }
+        target { action -> RequestState.Success(value = action.results) }
+    }
+    after(8.seconds) {
+        target { RequestState.Error(cause = RequestFailure.Timeout) }
+    }
+}
+```
+
+The return type of `target` supplies the graph destination. Use `update { action ->
+state.copy(...) }` when the transition also changes shared data; `target` owns the phase.
+See the [transition guide](actron-statechart/README.md#declaring-a-transition-with-one-target-type)
+and the complete [city search machine](examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt).
 
 ### Several machines on one screen
 
@@ -233,9 +252,9 @@ The inspector is reusable through [actron-timetravel-compose](actron-timetravel-
 ![Search Rome, inspect earlier events, then continue execution from a saved checkpoint.](doc/assets/weather-time-travel.gif)
 
 Viewing history renders saved frames without repeating network calls. **Continue here**
-restores a compatible checkpoint and starts a new continuation. Unfinished behavior entry
-work restarts from its beginning: Weather gets a fresh debounce delay and request timeout.
-Explicit chart timers retain their remaining delay. Later history is replaced. The host restores
+restores a compatible checkpoint and starts a new continuation. City search retains the remaining
+debounce and timeout duration; an unfinished HTTP request starts again. Other Weather features
+restart unfinished behavior entry work from its beginning. Later history is replaced. The host restores
 navigation. **Export** shares a recording; **Import** opens it in view-only mode.
 See [Weather's restoration and replay contract](examples/weather/README.md#session-history-and-replay).
 

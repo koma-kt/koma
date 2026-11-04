@@ -111,8 +111,8 @@ class WeatherHistoryTest {
         val selectedGraph = history.graph(selected) as actron.timetravel.compose.HistoryGraph.Machine
         assertEquals(actron.timetravel.compose.HistoryGraphProfile.Unavailable, selectedGraph.profile)
         val selectedHits = (selectedGraph.coverage as actron.timetravel.compose.HistoryGraphCoverage.Recorded).hits
-        // Entry work is a separate recorded input; the selected cut is before its final choice.
-        assertEquals(expected = 5L, actual = selectedHits.values.sum())
+        // QueryChanged settles inside the same decision; every edit records both edges atomically.
+        assertEquals(expected = 4L, actual = selectedHits.values.sum())
         assertEquals(
             expected = 6L,
             actual =
@@ -126,7 +126,7 @@ class WeatherHistoryTest {
         history.session.beginBranch(history.restoreDiagnostics(selected.snapshot))
         traceEdits(history, listOf("Paris"))
         assertEquals(
-            expected = 7L,
+            expected = 6L,
             actual =
                 history
                     .snapshot()
@@ -135,8 +135,8 @@ class WeatherHistoryTest {
                     .hits.values
                     .sum(),
         )
-        assertEquals(expected = 5L, actual = selectedHits.values.sum(), message = "Historical coverage is immutable")
-        assertEquals(expected = 5L, actual = (history.graph(selected) as actron.timetravel.compose.HistoryGraph.Machine).let { (it.coverage as actron.timetravel.compose.HistoryGraphCoverage.Recorded).hits.values.sum() })
+        assertEquals(expected = 4L, actual = selectedHits.values.sum(), message = "Historical coverage is immutable")
+        assertEquals(expected = 4L, actual = (history.graph(selected) as actron.timetravel.compose.HistoryGraph.Machine).let { (it.coverage as actron.timetravel.compose.HistoryGraphCoverage.Recorded).hits.values.sum() })
     }
 
     private fun traceEdits(
@@ -161,22 +161,6 @@ class WeatherHistoryTest {
             observer.onCommitted(InputAttribution.Unattributed, input, explained.decision)
             snapshot = explained.decision.snapshot
         }
-        inputs.forEach { input ->
-            record(input = input)
-            if (snapshot.context.phase == actron.example.weather.core.mvi.RequestState.QueryChanged) {
-                val next = if (snapshot.context.query.isBlank()) actron.example.weather.core.mvi.RequestState.Idle else actron.example.weather.core.mvi.RequestState.Debouncing
-                record(
-                    input =
-                        MachineInput.EntryResult(
-                            activation =
-                                snapshot.pendingEntries.values
-                                    .single()
-                                    .activation,
-                            output = EntryOutput.Transition(context = snapshot.context.copy(phase = next)),
-                            now = MachineTime.Zero,
-                        ),
-                )
-            }
-        }
+        inputs.forEach { input -> record(input = input) }
     }
 }

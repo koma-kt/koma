@@ -3576,6 +3576,18 @@ public final class actron/statechart/machine/TransitionProfile {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class actron/statechart/machine/TransitionRuleBuilder {
+	public fun <init> (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;)V
+	public final fun destination (Lkotlin/reflect/KClass;Lkotlin/jvm/functions/Function2;)V
+	public final fun guard (Lkotlin/jvm/functions/Function2;)V
+	public final fun register (Lactron/statechart/machine/MachineStateBuilder;Lactron/statechart/Trigger;Lkotlin/jvm/functions/Function1;)V
+	public final fun update (Lkotlin/jvm/functions/Function2;)V
+}
+
+public final class actron/statechart/machine/TransitionRuleScope {
+	public final fun getState ()Ljava/lang/Object;
+}
+
 public final class actron/statechart/machine/TransitionSelectionExplanation {
 	public synthetic fun <init> (ILactron/statechart/machine/CandidateDisposition;Ljava/util/List;ZZLjava/util/List;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1-sw1waRg ()I
@@ -3618,6 +3630,9 @@ public final class actron/statechart/machine/TypedInvocationDslKt {
 
 public final class actron/statechart/machine/TypedMachineStateBuilder {
 	public fun <init> (Lactron/statechart/machine/TypedStateMachineBuilder;Lactron/statechart/machine/MachineStateBuilder;Lkotlin/jvm/functions/Function2;)V
+	public final fun after-VtjQ1oo (JLkotlin/jvm/functions/Function1;)V
+	public final fun always (Lkotlin/jvm/functions/Function1;)V
+	public final fun declaration ()Lactron/statechart/machine/TransitionRuleBuilder;
 	public final fun getDelegate ()Lactron/statechart/machine/MachineStateBuilder;
 	public final fun getOwner ()Lactron/statechart/machine/TypedStateMachineBuilder;
 	public final fun getWriteState ()Lkotlin/jvm/functions/Function2;
@@ -3641,6 +3656,7 @@ public class actron/statechart/machine/TypedStateMachineBuilder {
 	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lactron/statechart/machine/MachineBuilder;Ljava/util/List;Ljava/util/List;Lactron/statechart/StateParent;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun <init> (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lactron/statechart/machine/MachineBuilder;Ljava/util/List;Ljava/util/List;Lactron/statechart/StateParent;Ljava/lang/String;Lactron/statechart/machine/TypedStateRegistry;)V
 	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lactron/statechart/machine/MachineBuilder;Ljava/util/List;Ljava/util/List;Lactron/statechart/StateParent;Ljava/lang/String;Lactron/statechart/machine/TypedStateRegistry;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun applyTarget (Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
 	public final fun historyReference-9F0ExCQ (Lkotlin/reflect/KClass;)Ljava/lang/String;
 	public final fun implicitReference-9F0ExCQ (Lkotlin/reflect/KClass;)Ljava/lang/String;
 	public final fun reference-9F0ExCQ (Lkotlin/reflect/KClass;)Ljava/lang/String;

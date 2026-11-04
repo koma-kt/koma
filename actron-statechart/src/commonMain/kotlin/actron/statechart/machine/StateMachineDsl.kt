@@ -6,6 +6,7 @@ import actron.core.Event
 import actron.statechart.ActionMatcher
 import actron.statechart.AtomicState
 import actron.statechart.EffectKey
+import actron.statechart.GuardCondition
 import actron.statechart.GuardKey
 import actron.statechart.StateChartDefinition
 import actron.statechart.StateId
@@ -97,6 +98,23 @@ class MachineStateBuilder<C : Any, A : Action, CMD : Any, E : Event>
         fun onEnter(block: MachineEnterScope<C, A, CMD, E>.() -> Unit) = implementation.onEnter(source, block)
 
         fun onExit(block: MachineExitScope<C, A, E>.() -> Unit) = implementation.onExit(source, block)
+
+        internal fun addDeclared(
+            target: StateId,
+            trigger: Trigger,
+            rule: DeclaredRule<C>,
+        ) {
+            val key = "dsl.transition.${transitions.size}"
+            val guard =
+                if (rule.guarded) {
+                    implementation.guard(label = key, guard = { snapshot, action -> rule.guard(snapshot.context, action) })
+                    GuardKey(name = key)
+                } else {
+                    GuardCondition.Unconditional
+                }
+            implementation.effect(label = key, effect = rule.reduce)
+            transitions += Transition(source = source, target = target, trigger = trigger, guard = guard, effect = EffectKey(name = key))
+        }
 
         @PublishedApi
         internal fun add(

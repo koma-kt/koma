@@ -3,6 +3,7 @@ package actron.statechart.machine
 import actron.core.Action
 import actron.core.ActronStoreDsl
 import actron.core.Event
+import actron.statechart.ActionMatcher
 import actron.statechart.AtomicState
 import actron.statechart.CompoundState
 import actron.statechart.FinalState
@@ -224,6 +225,16 @@ open class TypedStateMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E :
             return Machine(id, version, StateChartDefinition(initialId, nodes.toList(), transitions.toList()), implementation)
         }
 
+        @PublishedApi
+        internal fun applyTarget(
+            original: C,
+            updated: C,
+            target: S,
+        ): C {
+            require(readState(original) == readState(updated)) { "update must preserve the phase; use target to change it" }
+            return writeState(updated, target)
+        }
+
         internal fun finish(initial: S): StateId {
             val initialId = reference(initial::class)
             require(references.all { (id, type) -> states[id] == type }) { "Every referenced state type must be declared" }
@@ -310,6 +321,38 @@ class TypedMachineStateBuilder<C : Any, S : Any, A : Action, CMD : Any, E : Even
         @PublishedApi internal val delegate: MachineStateBuilder<C, A, CMD, E>,
         @PublishedApi internal val writeState: (C, S) -> C,
     ) {
+        /** Declare a graph edge; target's inferred return type is its destination. */
+        inline fun <reified T : A> on(noinline transition: TransitionRuleBuilder<C, S, T>.() -> Unit) {
+            declare<T>(
+                trigger = Trigger.OnAction(matcher = ActionMatcher.of<T>(name = requireNotNull(T::class.simpleName))),
+                transition = transition,
+            )
+        }
+
+        /** An automatic transition evaluated during the same decision until the machine settles. */
+        fun always(transition: TransitionRuleBuilder<C, S, Unit>.() -> Unit) {
+            declaration<Unit>().apply(transition).register(delegate = delegate, trigger = Trigger.Eventless, action = { Unit })
+        }
+
+        /** An activation-owned timer; checkpoints preserve its remaining duration. */
+        fun after(
+            delay: Duration,
+            transition: TransitionRuleBuilder<C, S, Unit>.() -> Unit,
+        ) {
+            declaration<Unit>().apply(transition).register(delegate = delegate, trigger = Trigger.After(delay = delay), action = { Unit })
+        }
+
+        @PublishedApi
+        internal inline fun <reified T : A> declare(
+            trigger: Trigger,
+            noinline transition: TransitionRuleBuilder<C, S, T>.() -> Unit,
+        ) {
+            declaration<T>().apply(transition).register(delegate = delegate, trigger = trigger, action = { it as T })
+        }
+
+        @PublishedApi
+        internal fun <T : Any> declaration(): TransitionRuleBuilder<C, S, T> = TransitionRuleBuilder(reference = owner::valueReference, applyTarget = owner::applyTarget)
+
         /** Bind a typed child to this state's activation, with typed event routes. */
         fun <CC : Any, CA : Action, CCMD : Any, CE : Event> invoke(
             child: TypedInvocation<C, A, CMD, E, CC, CA, CCMD, CE>,
@@ -379,13 +422,6 @@ class TypedMachineStateBuilder<C : Any, S : Any, A : Action, CMD : Any, E : Even
                 val updated = reduce(context, action)
                 writeState(updated, to(updated, action))
             }
-        }
-
-        inline fun <reified Target : S> after(
-            delay: Duration,
-            noinline to: (C) -> Target,
-        ) {
-            delegate.after(delay, owner.valueReference(Target::class)) { context -> writeState(context, to(context)) }
         }
 
         inline fun <reified T : A> internal(
