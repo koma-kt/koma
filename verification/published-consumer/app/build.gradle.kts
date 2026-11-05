@@ -48,8 +48,9 @@ kotlin {
         commonMain.dependencies {
             val coordinate = providers.gradleProperty("consumer.group").get()
             val version = providers.gradleProperty("consumer.version").get()
+            implementation(project.dependencies.platform("$coordinate:actron-bom:$version"))
             // core/statechart/observability are intentionally only transitive dependencies.
-            listOf("actron-decompose", "actron-compose", "actron-message", "actron-logging", "actron-statechart-compose", "actron-persistence").forEach { implementation("$coordinate:$it:$version") }
+            listOf("actron-decompose", "actron-compose", "actron-message", "actron-logging", "actron-statechart-compose", "actron-persistence").forEach { implementation("$coordinate:$it") }
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

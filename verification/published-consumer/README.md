@@ -16,13 +16,14 @@ scripts/verify-published-consumer.sh wasm
 scripts/verify-published-consumer.sh ios # requires macOS/Xcode
 ```
 
-Each invocation publishes **fourteen modules**, including persistence, test and debug tooling,
+Each invocation publishes the **BOM and fourteen library modules**, including persistence, test and debug tooling,
 with their root metadata and the selected platform's variants. Group/version are read from
 `gradle.properties`; plugin/dependency versions are read from the producer's version catalog.
 It creates and deletes a unique temporary Maven repository. It does not publish to Maven
 Central or modify the user's MavenLocal repository. Credentials and signing are unnecessary.
 
-The check validates POM coordinates/dependencies, Gradle metadata redirects and dependency
+The check validates BOM constraints and consumes modules without individual versions.
+It also validates POM coordinates/dependencies, Gradle metadata redirects and dependency
 coordinates, payload existence/size/SHA-256, and the published production dependency graph.
 For JVM, variant metadata and actual class files must target Java 11, independently of the JDK
 running Gradle. This catches a default-JVM-target problem that source-project tests can hide.

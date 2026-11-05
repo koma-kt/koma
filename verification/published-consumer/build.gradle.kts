@@ -35,7 +35,7 @@ tasks.register("verifyPublishedGraphs") {
             check(upstream.isEmpty()) { "Unsupported upstream Koma dependencies in $projectName: $upstream" }
             val actron = components.filterIsInstance<ModuleComponentIdentifier>().filter { it.group == forkGroup }
             check(actron.all { it.version == forkVersion }) { "Wrong fork version in $projectName: $actron" }
-            return actron.map { it.module.removeSuffix("-$suffix") }.toSet()
+            return actron.filter { it.module != "actron-bom" }.map { it.module.removeSuffix("-$suffix") }.toSet()
         }
         val production = modules(":app")
         check(production == productionNames) { "Published production graph: $production; expected $productionNames" }
