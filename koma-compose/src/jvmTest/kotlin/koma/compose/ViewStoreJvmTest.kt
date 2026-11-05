@@ -64,8 +64,7 @@ class ViewStoreJvmTest {
         withComposition(
             content = {
                 ViewStore<UiState, UiAction, UiEvent>(
-                    stateRef = mutableStateOf(UiState.Ready(0)),
-                    dispatch = {},
+                    state = UiState.Ready(0),
                     eventFlow = events,
                 ).eventEffect<UiEvent.ValueChanged> { event ->
                     handled += event
@@ -102,8 +101,7 @@ class ViewStoreJvmTest {
                 try {
                     composition.setContent {
                         ViewStore<UiState, UiAction, UiEvent>(
-                            stateRef = mutableStateOf(viewState),
-                            dispatch = {},
+                            state = viewState,
                             eventFlow = events,
                         ).eventEffect<UiEvent.ValueChanged> { event ->
                             handled += "${(state as UiState.Ready).value}:$label:${event.value}"
@@ -115,8 +113,7 @@ class ViewStoreJvmTest {
                     viewState = UiState.Ready(2)
                     composition.setContent {
                         ViewStore<UiState, UiAction, UiEvent>(
-                            stateRef = mutableStateOf(viewState),
-                            dispatch = {},
+                            state = viewState,
                             eventFlow = events,
                         ).eventEffect<UiEvent.ValueChanged> { event ->
                             handled += "${(state as UiState.Ready).value}:$label:${event.value}"
@@ -162,8 +159,7 @@ class ViewStoreJvmTest {
         withComposition(
             content = {
                 ViewStore<UiState, UiAction, UiEvent>(
-                    stateRef = mutableStateOf(UiState.Ready(0)),
-                    dispatch = {},
+                    state = UiState.Ready(0),
                     eventFlow = events,
                 ).handle<UiEvent.ValueChanged> { event ->
                     handled += event
@@ -732,9 +728,8 @@ class ViewStoreJvmTest {
         assertEquals(0, store.closeCount)
     }
 
-    @Suppress("DEPRECATION")
     @Test
-    fun rememberViewStore_deprecatedAutoClosePreservesCleanupBehavior() = runTest(testDispatcher) {
+    fun rememberViewStore_autoCloseControlsCleanup() = runTest(testDispatcher) {
         for (autoClose in listOf(false, true)) {
             val store = TestStore(UiState.Ready(0))
             withComposition(content = { rememberViewStore(store, autoClose = autoClose) })

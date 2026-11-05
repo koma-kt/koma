@@ -43,12 +43,15 @@ class ViewStore<S : State, A : Action, E : Event> internal constructor(
     val dispatch: (action: A) -> Unit,
     @PublishedApi internal val eventFlow: Flow<E>,
 ) {
+    // NOTE: Keep the dispatch and eventFlow arguments until test support is implemented.
     constructor(
         state: S,
+        dispatch: (A) -> Unit = {},
+        eventFlow: Flow<E> = emptyFlow(),
     ) : this(
         stateRef = mutableStateOf(state),
-        dispatch = {},
-        eventFlow = emptyFlow(),
+        dispatch = dispatch,
+        eventFlow = eventFlow,
     )
 
     val state: S
@@ -115,31 +118,16 @@ class ViewStore<S : State, A : Action, E : Event> internal constructor(
  * Use this overload when a Store is already provided by a ViewModel or dependency injection.
  * For a given Store instance, this function returns the same [ViewStore] instance across
  * recompositions. A new [ViewStore] is created only when [store] changes.
- * The Store is not closed by this function; its owner is responsible for closing it.
+ *
+ * When [autoClose] is true, the Store is closed when the composable leaves the composition.
+ * Otherwise, its owner is responsible for closing it. The [autoClose] value is fixed when the
+ * Store instance is adopted; recomposition alone does not change it for the same Store.
  *
  * @param store Source Store instance
+ * @param autoClose Whether to close the Store when the composable leaves the composition;
+ * defaults to false
  * @return A ViewStore state holder backed by the Store
  */
-@Composable
-fun <S : State, A : Action, E : Event> rememberViewStore(store: Store<S, A, E>): ViewStore<S, A, E> {
-    return rememberViewStoreInternal(store, autoClose = false)
-}
-
-/**
- * Remembers a [ViewStore] with optional Store cleanup on composition disposal.
- *
- * This overload will be removed in a future release. Use `rememberViewStore(store)` instead.
- * When migrating from `autoClose = true`, move Store cleanup to its owner before removing the
- * argument. The existing cleanup behavior is preserved until this overload is removed.
- *
- * @param store Source Store instance
- * @param autoClose Whether to close the Store when the composable leaves the composition
- * @return A ViewStore state holder backed by the Store
- */
-@Deprecated(
-    message = "The autoClose overload will be removed in a future release. Use rememberViewStore(store). If autoClose is true, move Store cleanup to its owner before removing the argument.",
-    level = DeprecationLevel.WARNING,
-)
 @Composable
 fun <S : State, A : Action, E : Event> rememberViewStore(store: Store<S, A, E>, autoClose: Boolean = false): ViewStore<S, A, E> {
     return rememberViewStoreInternal(store, autoClose)
@@ -193,7 +181,9 @@ fun <S : State, A : Action, E : Event> rememberViewStore(key: Any? = null, autoC
  */
 @Composable
 fun <S : State, A : Action, E : Event> retainViewStore(vararg keys: Any?, store: () -> Store<S, A, E>): ViewStore<S, A, E> {
+    // Always close the Store in onRetired; callers cannot opt out of this cleanup.
     val retainedStore = retain(*keys) { RetainedStore(store()) }
+    // Do not close the Store on composition disposal.
     return rememberViewStoreInternal(retainedStore.store, autoClose = false)
 }
 
@@ -217,6 +207,7 @@ private class RetainedStore<S : State, A : Action, E : Event>(
 
 @Composable
 private fun <S : State, A : Action, E : Event> rememberViewStoreInternal(store: Store<S, A, E>, autoClose: Boolean): ViewStore<S, A, E> {
+    // Keep the close policy fixed for the lifetime of the remembered Store instance.
     val closeStoreOnDispose = remember(store) { autoClose }
 
     val state = key(store) {
@@ -231,6 +222,7 @@ private fun <S : State, A : Action, E : Event> rememberViewStoreInternal(store: 
         }
     }
 
+    // Return the same ViewStore instance across state changes as long as the Store is unchanged.
     return remember(store) {
         ViewStore(
             stateRef = state,
