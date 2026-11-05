@@ -17,6 +17,11 @@ on:
 permissions:
   contents: read
 
+# Keep the newest PR checks; release verification is never cancelled by a branch update.
+concurrency:
+  group: gradle-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: build (${{ matrix.target }}, ${{ matrix.os }})
@@ -26,6 +31,8 @@ jobs:
         include:
           - target: iosSimulatorArm64Test
             os: macos-26
+            # Device budgets have a dedicated measured soak workflow.
+            gradle-options: -x :resource-soak:iosSimulatorArm64Test
           - target: testAndroidHostTest
             os: ubuntu-latest
           - target: jvmTest
@@ -47,10 +54,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          # Only quality ratchets compare Git history.
+          fetch-depth: ${{ matrix.target == 'jvmTest' && '0' || '1' }}
       - name: Validate Gradle Wrapper
         uses: gradle/actions/wrapper-validation@v5
       - uses: actions/cache@v5
+        if: runner.os == 'macOS'
         with:
           path: |
             ~/.konan
@@ -67,7 +76,7 @@ jobs:
         env:
           QUALITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          python3 -m unittest discover -s scripts -p 'test_detekt_baselines.py'
+          python3 -m unittest discover -s scripts -p 'test_*.py'
           if [[ "$QUALITY_BASE" =~ ^0+$ ]] || [[ -z "$QUALITY_BASE" ]]; then
             ./gradlew ktlintCheck detekt
           else

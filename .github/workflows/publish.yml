@@ -1,31 +1,114 @@
 name: Publish
 on:
+  # published covers both stable releases and prereleases, including publication from a draft.
   release:
-    types: [ prereleased ]
+    types: [published]
+
+permissions:
+  contents: read
+
+# Never interrupt an upload, and serialize reruns for the same immutable Maven version.
+concurrency:
+  group: publish-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
 jobs:
+  version:
+    name: Validate release version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify tag and publication coordinates
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_release.py'
+          python3 scripts/validate-release.py . "$RELEASE_TAG"
+      - name: Explain publication mode
+        env:
+          ENABLED: ${{ vars.MAVEN_CENTRAL_PUBLISH_ENABLED }}
+        run: |
+          if [[ "$ENABLED" == true ]]; then
+            echo 'Maven Central publication is enabled.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Maven Central publication is disabled. Checks and an unsigned Maven repository artifact will be prepared without credentials.' >> "$GITHUB_STEP_SUMMARY"
+          fi
   test:
+    needs: version
     uses: ./.github/workflows/gradle.yml
   consumer:
+    needs: version
     uses: ./.github/workflows/published-consumer.yml
-  publish:
-    # GitHub-only releases must not attempt a Maven upload. Enable after configuring secrets.
-    if: vars.MAVEN_CENTRAL_PUBLISH_ENABLED == 'true'
-    name: Release build and publish
+  prepare:
+    name: Prepare unsigned Maven repository
+    timeout-minutes: 120
+    if: vars.MAVEN_CENTRAL_PUBLISH_ENABLED != 'true'
     needs: [test, consumer]
-    runs-on: macOS-latest
+    runs-on: macos-26
     steps:
-      - name: Check out code
-        uses: actions/checkout@v5
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
-          distribution: 'zulu'
-          java-version: 21
-      - name: Publish to MavenCentral
-        run: ./gradlew publishToMavenCentral --no-configuration-cache
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/cache@v5
+        with:
+          path: ~/.konan
+          key: ${{ runner.os }}-konan-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build every publication without credentials
+        run: ./gradlew publishAllPublicationsToConsumerRepository -Pactron.consumer.repository="$RUNNER_TEMP/maven" --no-configuration-cache --max-workers=2
+      - name: Validate prepared Maven metadata and payloads
+        run: |
+          group=$(python3 verification/published-consumer/config.py . group)
+          version=$(python3 verification/published-consumer/config.py . version)
+          for target in jvm android js wasm ios; do
+            python3 verification/published-consumer/verify_metadata.py "$RUNNER_TEMP/maven" "$group" "$version" "$target"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-maven-repository
+          path: ${{ runner.temp }}/maven
+          if-no-files-found: error
+  publish:
+    # Enable only after Central Portal namespace, user token and signing key are configured.
+    if: vars.MAVEN_CENTRAL_PUBLISH_ENABLED == 'true'
+    name: Release to Maven Central
+    timeout-minutes: 120
+    needs: [test, consumer]
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/cache@v5
+        with:
+          path: ~/.konan
+          key: ${{ runner.os }}-konan-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Validate credentials and publish all modules including BOM
+        shell: bash
+        run: |
+          for name in ORG_GRADLE_PROJECT_mavenCentralUsername ORG_GRADLE_PROJECT_mavenCentralPassword ORG_GRADLE_PROJECT_signingInMemoryKey; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing required publication secret: $name"
+              exit 1
+            fi
+          done
+          # An omitted key id must stay absent: the signing plugin distinguishes it from "".
+          if [[ -z "$ORG_GRADLE_PROJECT_signingInMemoryKeyId" ]]; then
+            unset ORG_GRADLE_PROJECT_signingInMemoryKeyId
+          fi
+          if [[ -z "$ORG_GRADLE_PROJECT_signingInMemoryKeyPassword" ]]; then
+            unset ORG_GRADLE_PROJECT_signingInMemoryKeyPassword
+          fi
+          ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache --max-workers=2
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.MAVEN_SIGNING_KEY_ID }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_GPG_KEY_CONTENTS }}
+          ORG_GRADLE_PROJECT_mavenCentralDeploymentValidation: PUBLISHED

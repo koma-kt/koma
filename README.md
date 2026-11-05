@@ -28,6 +28,12 @@ feature's behavior. A counter can use one state; a loading screen can use sealed
 more complex workflows can add hierarchy or parallelism. Navigation, repositories and DI
 remain application concerns.
 
+**Total Null Safe by design.** Actron's domain values and API contracts are non-null.
+Lifecycle phases and domain outcomes model absence explicitly. Source and compiler checks
+enforce this policy across the library, examples, tests and tooling in CI. Nullable platform
+and dependency APIs are normalized at their boundaries; see the
+[null-free API and enforcement policy](doc/guides/absence-policy.md) for the exact scope.
+
 ## 1. A Store for a counter
 
 `behaviorStateMachine` declares handlers inside their state. Read the immutable `state` and
@@ -349,7 +355,7 @@ Library and example sources follow the [absence policy](doc/guides/absence-polic
 - [Device resource budgets](verification/resource-soak/README.md): required Android/iOS soak runs, resource cleanup, memory plateau and commit latency reports.
 - [Internal documentation](doc/internal/README.md): architecture, decisions, review evidence and roadmap.
 - [IntelliJ plugin](tooling/intellij-plugin/README.md): K2 gutter, model Find Usages and diagram navigation.
-- [Build conventions](build-logic/README.md): coordinates, publishing and project setup.
+- [Build conventions](build-logic/README.md): Maven Central release setup, BOM version alignment and CI cost controls.
 - Validation: `./gradlew jvmTest apiCheck checkDebugGraph`; the CI also tests Android, iOS, JS and Wasm.
 - Published artifacts: `scripts/verify-published-consumer.sh jvm` builds an
   [independent Maven consumer](verification/published-consumer/README.md); CI also compiles its

@@ -14,6 +14,20 @@ suffixes = {"jvm": ["jvm"], "android": ["android"], "js": ["js"], "wasm": ["wasm
 ns = {"m": "http://maven.apache.org/POM/4.0.0"}
 edges = {module: set() for module in modules}
 
+# A BOM is dependency management, never an aggregate runtime dependency. Validate its real
+# Maven POM, including modules outside this consumer's platform coverage.
+bom_folder = repo / group.replace(".", "/") / "actron-bom" / version
+bom = ET.parse(bom_folder / f"actron-bom-{version}.pom").getroot()
+assert bom.findtext("m:packaging", namespaces=ns) == "pom"
+assert not bom.findall("m:dependencies/m:dependency", ns), "BOM must not pull in tooling"
+managed = {}
+for item in bom.findall("m:dependencyManagement/m:dependencies/m:dependency", ns):
+    assert item.findtext("m:groupId", namespaces=ns) == group
+    assert item.findtext("m:version", namespaces=ns) == version
+    managed[item.findtext("m:artifactId", namespaces=ns)] = version
+assert modules | {"actron-diagnostics", "actron-diagnostics-sdk", "actron-diagnostics-crashlytics"} <= managed.keys(), managed
+assert {module + "-" + suffix for module in modules for suffix in suffixes} <= managed.keys(), managed
+
 def dependency(owner, dependency_group, name, dependency_version):
     assert not name.startswith("koma-"), (owner, "legacy Koma dependency", name)
     if not name.startswith("actron-"):

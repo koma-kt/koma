@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# Keep the newest PR checks; release verification is never cancelled by a branch update.
+concurrency:
+  group: android-compose-lifecycle-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   android-compose-lifecycle:
     runs-on: ubuntu-latest

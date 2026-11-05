@@ -21,6 +21,7 @@ plugins {
 // change of the public surface is a deliberate `apiDump` in the same change.
 @OptIn(kotlinx.validation.ExperimentalBCVApi::class)
 apiValidation {
+    ignoredProjects += "actron-bom" // dependency platform, no Kotlin API
     ignoredProjects += "behaviour-review" // internal CI artifact exporter
     ignoredProjects += "resource-soak" // device verification harness, not a published API
     ignoredProjects += listOf("weather", "shared", "debugTools", "androidApp", "desktopApp", "webApp") // weather example modules

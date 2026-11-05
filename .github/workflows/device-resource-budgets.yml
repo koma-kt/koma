@@ -17,6 +17,11 @@ permissions:
 env:
   SOAK_SECONDS: ${{ inputs.seconds || '300' }}
 
+# Keep the newest PR checks; release verification is never cancelled by a branch update.
+concurrency:
+  group: device-resource-budgets-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ios-resource-budgets:
     runs-on: macos-26
