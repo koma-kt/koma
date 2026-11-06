@@ -4,6 +4,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 
 /**
  * Marker supertype for DSL scopes exposed from Store handlers.
+ *
+ * Side-effecting operations check that the Store and owning operation are active and throw
+ * cancellation otherwise. Transaction operations also check their caller's context.
+ * This includes launching work, clearing pending actions, and cancelling tracked launches.
+ * Reading state, action, or isActive does not perform this check.
  */
 sealed interface StoreScope
 
@@ -19,15 +24,16 @@ interface EnterScope<S : State, E : Event, S2 : S> : StoreScope {
     val state: S2
 
     /**
-     * Registers the next state to apply after the current enter handler finishes
-     * by computing it in the given block.
-     * This does not update [state] immediately.
-     * If called multiple times in the same handler, the last specified state is used.
+     * Computes the next state and immediately exits the current enter handler.
+     * The state is applied at the handler boundary; [state] is not updated in place.
+     * Code after this call is not executed, but `finally` blocks still run.
+     * Do not swallow the internal exit signal with a broad `catch (Throwable)`.
+     * Throws cancellation if the Store or operation is no longer active.
      * If no next state is registered, the current [state] is kept.
      *
      * @param block A function that computes and returns the new state
      */
-    fun nextState(block: () -> S)
+    fun nextState(block: () -> S): Nothing
 
     /**
      * @deprecated Use `nextState { ... }`.
@@ -36,7 +42,7 @@ interface EnterScope<S : State, E : Event, S2 : S> : StoreScope {
         message = "Use nextState { ... }",
         replaceWith = ReplaceWith("nextState(block)"),
     )
-    fun nextStateBy(block: () -> S) {
+    fun nextStateBy(block: () -> S): Nothing {
         nextState(block)
     }
 
@@ -47,7 +53,7 @@ interface EnterScope<S : State, E : Event, S2 : S> : StoreScope {
         message = "Use nextState { ... }",
         replaceWith = ReplaceWith("nextState { state }"),
     )
-    fun nextState(state: S) {
+    fun nextState(state: S): Nothing {
         nextState { state }
     }
 
@@ -119,15 +125,16 @@ interface EnterScope<S : State, E : Event, S2 : S> : StoreScope {
             val state: S2
 
             /**
-             * Registers the next state to apply after the current transaction finishes
-             * by computing it in the given block.
-             * This does not update [state] immediately.
-             * If called multiple times in the same transaction, the last specified state is used.
+             * Computes the next state and immediately exits the current transaction.
+             * The state is applied at the handler boundary; [state] is not updated in place.
+             * Code after this call is not executed, but `finally` blocks still run.
+             * Do not swallow the internal exit signal with a broad `catch (Throwable)`.
+             * Throws cancellation if the Store or operation is no longer active.
              * If no next state is registered, the current [state] is kept.
              *
              * @param block A function that computes and returns the new state
              */
-            fun nextState(block: () -> S)
+            fun nextState(block: () -> S): Nothing
 
             /**
              * @deprecated Use `nextState { ... }`.
@@ -136,7 +143,7 @@ interface EnterScope<S : State, E : Event, S2 : S> : StoreScope {
                 message = "Use nextState { ... }",
                 replaceWith = ReplaceWith("nextState(block)"),
             )
-            fun nextStateBy(block: () -> S) {
+            fun nextStateBy(block: () -> S): Nothing {
                 nextState(block)
             }
 
@@ -147,7 +154,7 @@ interface EnterScope<S : State, E : Event, S2 : S> : StoreScope {
                 message = "Use nextState { ... }",
                 replaceWith = ReplaceWith("nextState { state }"),
             )
-            fun nextState(state: S) {
+            fun nextState(state: S): Nothing {
                 nextState { state }
             }
 
@@ -223,15 +230,16 @@ interface ActionScope<S : State, A : Action, E : Event, S2 : S> : StoreScope {
     val action: A
 
     /**
-     * Registers the next state to apply after the current action handler finishes
-     * by computing it in the given block.
-     * This does not update [state] immediately.
-     * If called multiple times in the same handler, the last specified state is used.
+     * Computes the next state and immediately exits the current action handler.
+     * The state is applied at the handler boundary; [state] is not updated in place.
+     * Code after this call is not executed, but `finally` blocks still run.
+     * Do not swallow the internal exit signal with a broad `catch (Throwable)`.
+     * Throws cancellation if the Store or operation is no longer active.
      * If no next state is registered, the current [state] is kept.
      *
      * @param block A function that computes and returns the new state
      */
-    fun nextState(block: () -> S)
+    fun nextState(block: () -> S): Nothing
 
     /**
      * @deprecated Use `nextState { ... }`.
@@ -240,7 +248,7 @@ interface ActionScope<S : State, A : Action, E : Event, S2 : S> : StoreScope {
         message = "Use nextState { ... }",
         replaceWith = ReplaceWith("nextState(block)"),
     )
-    fun nextStateBy(block: () -> S) {
+    fun nextStateBy(block: () -> S): Nothing {
         nextState(block)
     }
 
@@ -251,7 +259,7 @@ interface ActionScope<S : State, A : Action, E : Event, S2 : S> : StoreScope {
         message = "Use nextState { ... }",
         replaceWith = ReplaceWith("nextState { state }"),
     )
-    fun nextState(state: S) {
+    fun nextState(state: S): Nothing {
         nextState { state }
     }
 
@@ -346,15 +354,16 @@ interface ActionScope<S : State, A : Action, E : Event, S2 : S> : StoreScope {
             val action: A
 
             /**
-             * Registers the next state to apply after the current transaction finishes
-             * by computing it in the given block.
-             * This does not update [state] immediately.
-             * If called multiple times in the same transaction, the last specified state is used.
+             * Computes the next state and immediately exits the current transaction.
+             * The state is applied at the handler boundary; [state] is not updated in place.
+             * Code after this call is not executed, but `finally` blocks still run.
+             * Do not swallow the internal exit signal with a broad `catch (Throwable)`.
+             * Throws cancellation if the Store or operation is no longer active.
              * If no next state is registered, the current [state] is kept.
              *
              * @param block A function that computes and returns the new state
              */
-            fun nextState(block: () -> S)
+            fun nextState(block: () -> S): Nothing
 
             /**
              * @deprecated Use `nextState { ... }`.
@@ -363,7 +372,7 @@ interface ActionScope<S : State, A : Action, E : Event, S2 : S> : StoreScope {
                 message = "Use nextState { ... }",
                 replaceWith = ReplaceWith("nextState(block)"),
             )
-            fun nextStateBy(block: () -> S) {
+            fun nextStateBy(block: () -> S): Nothing {
                 nextState(block)
             }
 
@@ -374,7 +383,7 @@ interface ActionScope<S : State, A : Action, E : Event, S2 : S> : StoreScope {
                 message = "Use nextState { ... }",
                 replaceWith = ReplaceWith("nextState { state }"),
             )
-            fun nextState(state: S) {
+            fun nextState(state: S): Nothing {
                 nextState { state }
             }
 
@@ -427,15 +436,16 @@ interface RecoverScope<S : State, E : Event, S2 : S, T : Exception> : StoreScope
     val error: T
 
     /**
-     * Registers the next state to apply after the current recover handler finishes
-     * by computing it in the given block.
-     * This does not update [state] immediately.
-     * If called multiple times in the same handler, the last specified state is used.
+     * Computes the next state and immediately exits the current recover handler.
+     * The state is applied at the handler boundary; [state] is not updated in place.
+     * Code after this call is not executed, but `finally` blocks still run.
+     * Do not swallow the internal exit signal with a broad `catch (Throwable)`.
+     * Throws cancellation if the Store or operation is no longer active.
      * If no next state is registered, the current [state] is kept.
      *
      * @param block A function that computes and returns the new state
      */
-    fun nextState(block: () -> S)
+    fun nextState(block: () -> S): Nothing
 
     /**
      * @deprecated Use `nextState { ... }`.
@@ -444,7 +454,7 @@ interface RecoverScope<S : State, E : Event, S2 : S, T : Exception> : StoreScope
         message = "Use nextState { ... }",
         replaceWith = ReplaceWith("nextState(block)"),
     )
-    fun nextStateBy(block: () -> S) {
+    fun nextStateBy(block: () -> S): Nothing {
         nextState(block)
     }
 
@@ -455,7 +465,7 @@ interface RecoverScope<S : State, E : Event, S2 : S, T : Exception> : StoreScope
         message = "Use nextState { ... }",
         replaceWith = ReplaceWith("nextState { state }"),
     )
-    fun nextState(state: S) {
+    fun nextState(state: S): Nothing {
         nextState { state }
     }
 

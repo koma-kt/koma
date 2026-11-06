@@ -49,8 +49,8 @@ class StoreConcurrentTest {
                     nextState { AppState.Initial(state.count - 1) }
                 }
                 action<AppAction.DelayedIncrement> {
-                    nextState { AppState.Processing(state.count) }
                     event(AppEvent.Processing)
+                    nextState { AppState.Processing(state.count) }
                 }
                 action<AppAction.RequestResult> {
                     nextState { AppState.Result(state.count) }
@@ -64,8 +64,8 @@ class StoreConcurrentTest {
                         delay(100)
                         transaction {
                             val newCount = state.count + 1
-                            nextState { AppState.Result(newCount) }
                             event(AppEvent.Completed(newCount))
+                            nextState { AppState.Result(newCount) }
                         }
                     }
                 }

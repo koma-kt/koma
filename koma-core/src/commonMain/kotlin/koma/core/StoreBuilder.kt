@@ -2,6 +2,8 @@ package koma.core
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 
@@ -155,11 +157,26 @@ class StoreBuilder<S : State, A : Action, E : Event> internal constructor() {
         ) {
             suspend operator fun invoke(scope: SC) {
                 if (dispatcher == null) {
-                    handler(scope)
+                    invokeChecked(scope)
                 } else {
                     withContext(dispatcher) {
-                        handler(scope)
+                        invokeChecked(scope)
                     }
+                }
+            }
+
+            private suspend fun invokeChecked(scope: SC) {
+                val context = currentCoroutineContext()
+                val contextScope = scope as? HandlerContextScope
+                contextScope?.handlerContext = context
+                try {
+                    context.ensureActive()
+                    handler(scope)
+                } finally {
+                    contextScope?.handlerContext = null
+                    // Cancellation takes precedence over a pending normal DSL exit,
+                    // including cancellation from a handler's finally block.
+                    context.ensureActive()
                 }
             }
         }
