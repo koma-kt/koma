@@ -300,7 +300,7 @@ fun CounterStore(
 // or, define a Store class using delegation
 class CounterStore(
     counterRepository: CounterRepository,
-): Store<CounterState, CounterAction, CounterEvent> by Store(
+) : Store<CounterState, CounterAction, CounterEvent> by Store(
     initialState = CounterState(count = 0),
     builder = {
         state<CounterState> {
@@ -344,7 +344,7 @@ If you need multiple *States* (for example, a UI during data loading), define th
 
 ```kt
 sealed interface CounterState : State {
-    data object Loading : CounterState 
+    data object Loading : CounterState
     data class Main(val count: Int) : CounterState
 }
 ```
@@ -626,7 +626,7 @@ val store: Store<CounterState, CounterAction, CounterEvent> = Store {
 }
 ```
 
-If you don’t use an auto-managed scope like ViewModel's `viewModelScope` or Compose's `rememberCoroutineScope()`, call Store's `.close()` method explicitly when the *Store* is no longer needed.
+If you don’t use an auto-managed scope like ViewModel's `viewModelScope`, call Store's `.close()` method explicitly when the *Store* is no longer needed. Stores created by `retainViewStore { ... }` are closed automatically when retention ends.
 Then, processing of all Coroutines will stop.
 
 #### Specifying CoroutineDispatchers
@@ -733,7 +733,7 @@ You can use Store's `.state` (StateFlow), `.event` (Flow), and `.dispatch()` dir
 implementation("io.github.koma-kt:koma-compose:<latest-release>")
 ```
 
-Create an instance of the `ViewStore` from a *Store* using the `rememberViewStore()` function.
+Use `rememberViewStore()` for a *Store* owned by a ViewModel or another external owner. Use `retainViewStore{}` to create a *Store* owned by the UI.
 For example, if you have a *Store* in ViewModels, it would look like this:
 
 ```kt
@@ -791,56 +791,53 @@ class MainViewModel @Inject constructor(
 }
 ```
 
-You can create a `ViewStore` instance without using ViewModel as shown below:
+Without a ViewModel, use `retainViewStore{}` to create and retain the *Store*:
+
+> [!NOTE]
+> `retainViewStore{}` owns the Store and always closes it when retention ends or creation is abandoned. Retention follows Compose's `LocalRetainedValuesStore`, allowing the Store to survive transient composition recreation, such as Android configuration changes when a retaining owner is installed. Without a retaining owner, the Store is closed when it leaves composition. This retains state in memory only; it does not restore state after process death.
+>
+> With Navigation 3, add a retained-values store decorator to `NavDisplay`'s `entryDecorators`, as shown in the [Navigation 3 retain sample](https://github.com/android/nav3-recipes/blob/f4d115959f4f3a1e903e67705954c66aa008adef/app/src/main/java/com/example/nav3recipes/retain/RetainActivity.kt). This retains each entry's Store while the entry remains on the back stack and closes it when the entry is popped.
 
 ```kt
 fun CounterStore(
-    coroutineContext: CoroutineContext,
-    stateSaver: StateSaver<CounterState>,
     counterRepository: CounterRepository,
 ): Store<CounterState, CounterAction, CounterEvent> = Store {
     // ...
 
-    coroutineContext(coroutineContext)
-    stateSaver(stateSaver)
+    coroutineContext(Dispatchers.Main.immediate)
 }
 ```
 
 ```kt
 @Composable
-fun CounterScreen() { // wrapper for the preview-friendly CounterScreen below
-    val coroutineScope = rememberCoroutineScope()
-    val stateSaver = rememberStateSaver()
-    val viewStore: ViewStore<CounterState, CounterAction, CounterEvent> = rememberViewStore {
+fun CounterScreen(
+    viewStore: ViewStore<CounterState, CounterAction, CounterEvent> = retainViewStore {
         CounterStore(
-            coroutineContext = coroutineScope.coroutineContext, // or, specify the autoClose option in rememberViewStore{}
-            stateSaver = stateSaver, // state persistence during screen rotation, etc.
             counterRepository = CounterRepositoryImpl(),
         )
-    }
-    CounterScreen(viewStore = viewStore)
-}
-
-@Composable
-fun CounterScreen(
-    viewStore: ViewStore<CounterState, CounterAction, CounterEvent>,
+    },
 ) {
     // ...
 }
 ```
 
-If you inject instances such as Repository using a DI library, it is useful to create a class like the following.
+If you inject dependencies such as repositories using a DI library, you can provide a Store factory:
 
 ```kt
-class CounterStoreContainer(
+class CounterStoreContainer( // provide with a DI library
     private val counterRepository: CounterRepository,
 ) {
-    fun build(coroutineContext: CoroutineContext, stateSaver: StateSaver<CounterState>): Store<CounterState, CounterAction, CounterEvent> = Store {
-        // ...
+    fun build(): Store<CounterState, CounterAction, CounterEvent> = CounterStore(
+        counterRepository = counterRepository,
+    )
+}
 
-        coroutineContext(coroutineContext)
-        stateSaver(stateSaver)
+@Composable
+fun CounterRoute(container: CounterStoreContainer) {
+    val viewStore = retainViewStore(container) {
+        container.build()
     }
+    CounterScreen(viewStore = viewStore)
 }
 ```
 
@@ -1194,7 +1191,6 @@ store.record { recorder ->
 ```
 
 If you need custom recording behavior, implement your own `Plugin` and register it via `patch { plugin(...) }`.
-If your `action {}` or `enter {}` logic launches additional coroutines with `launch {}`, or if you need virtual time control, use test dispatcher and scheduler control separately.
 
 Use `patch { ... }` when you want to replace non-state *Store* configuration in tests without rewriting the *Store* definition.
 
@@ -1227,3 +1223,5 @@ Inside `patch` block, you can use these APIs:
 - `plugin(...)`
 - `clearPlugins()`
 - `replacePlugins(...)`
+
+Since `initialState` and `coroutineContext` can be overridden with `patch` in tests, you do not need to expose them as Store constructor or factory parameters solely for testing. Apply the patch before the Store starts, with `initialState` set before state is read and `coroutineContext` set before any Store coroutine is launched.

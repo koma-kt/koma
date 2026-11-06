@@ -51,6 +51,7 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":koma-core"))
             implementation(compose.runtime)
+            implementation(libs.compose.runtime.retain)
             implementation(libs.rin)
         }
         commonTest.dependencies {

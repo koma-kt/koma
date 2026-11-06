@@ -24,8 +24,17 @@ private class StateSaverImpl<S : State> : StateSaver<S> {
  * This saver is retained in memory via `rememberRetained` and is intended for Compose-driven
  * state restoration.
  *
+ * Prefer [retainViewStore] to keep the Store itself across transient composition recreation.
+ * Remove this saver from the Store configuration when migrating to that approach.
+ * Neither approach persists state across process death; use an appropriate [StateSaver]
+ * implementation if persistent state restoration is required.
+ *
  * @return A [StateSaver] for preserving state snapshots in Compose
  */
+@Deprecated(
+    message = "Use retainViewStore to retain the Store itself across transient composition recreation instead of remembering an in-memory StateSaver.",
+    level = DeprecationLevel.WARNING,
+)
 @ExperimentalKomaApi
 @Suppress("unused")
 @Composable
