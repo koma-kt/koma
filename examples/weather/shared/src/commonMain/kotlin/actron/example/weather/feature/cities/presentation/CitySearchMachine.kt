@@ -77,7 +77,7 @@ sealed interface CitySearchAction : Action {
 }
 
 @Serializable
-data class SearchCitiesCommand(
+data class SearchCities(
     val query: String,
     val revision: Long,
 )
@@ -85,7 +85,7 @@ data class SearchCitiesCommand(
 /** Declared transitions share one graph with execution, guards and activation-owned timers. */
 object CitySearchMachine {
     // Stores own snapshots and commands; this immutable definition is shared.
-    private val definition: Machine<CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent> =
+    private val definition: Machine<CitySearchState, CitySearchAction, SearchCities, NoEvent> =
         typedStateMachine(
             id = DefinitionId(value = "city-search"),
             // v14 stores the full sealed state in checkpoints and recordings.
@@ -149,7 +149,12 @@ object CitySearchMachine {
                     }
                 }
                 onEnter {
-                    command(command = SearchCitiesCommand(query = state.query.trim(), revision = state.revision))
+                    command(
+                        SearchCities(
+                            query = state.query.trim(),
+                            revision = state.revision,
+                        ),
+                    )
                 }
                 on<CitySearchAction.Found> {
                     guard { action -> action.revision == state.revision }
@@ -175,5 +180,5 @@ object CitySearchMachine {
             }
         }
 
-    fun create(): Machine<CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent> = definition
+    fun create(): Machine<CitySearchState, CitySearchAction, SearchCities, NoEvent> = definition
 }

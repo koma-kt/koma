@@ -41,7 +41,7 @@ class DefaultCitySearchComponent(
     componentContext: ComponentContext,
     private val endpoint: BridgeEndpoint<Nothing, CitySearchComponent.News>,
     coroutineContext: CoroutineContext,
-    private val store: MachineStore<CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent>,
+    private val store: MachineStore<CitySearchState, CitySearchAction, SearchCities, NoEvent>,
     private val settingsAction: @Composable () -> Unit,
 ) : CitySearchComponent,
     ComponentContext by componentContext {

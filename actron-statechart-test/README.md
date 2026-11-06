@@ -205,7 +205,7 @@ val model = CitySearchMachine.create().scenarios(CitySearchState.Idle()) {
         }
     }
     replies(ReplyMode.entries.toSet()) { command ->
-        // An actual SearchCitiesCommand emitted on this path, with its real revision.
+        // An actual SearchCities emitted on this path, with its real revision.
         listOf(
             CitySearchAction.Found(command.revision, fixtures.getValue(command.query)),
             CitySearchAction.Failed(command.revision, "offline"),

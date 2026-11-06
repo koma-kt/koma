@@ -18,7 +18,7 @@ import kotlin.time.Duration.Companion.seconds
 class WeatherMachinesCoverageTest {
     private enum class Phase { Idle, Debouncing, Loading, Success, Error, TimeoutError }
 
-    private suspend fun MachineTestScenario<CitySearchState, CitySearchAction, SearchCitiesCommand, actron.example.weather.core.mvi.NoEvent>.preparePhase(phase: Phase) {
+    private suspend fun MachineTestScenario<CitySearchState, CitySearchAction, SearchCities, actron.example.weather.core.mvi.NoEvent>.preparePhase(phase: Phase) {
         if (phase != Phase.Idle) dispatch(CitySearchAction.ChangeQuery("London"))
         if (phase != Phase.Idle && phase != Phase.Debouncing) advanceTimeBy(350.milliseconds)
         when (phase) {

@@ -20,7 +20,7 @@ observation. Use typed predicates to say what starts and satisfies the obligatio
 
 ```kotlin
 val rules = TemporalRules<
-    CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent
+    CitySearchState, CitySearchAction, SearchCities, NoEvent
 >().apply {
     respondsWithin(
         name = "each-search-finishes-or-is-cancelled",

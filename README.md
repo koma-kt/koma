@@ -106,7 +106,7 @@ For example, using the domain types from the
 ```kotlin
 fun citySearchHandler(
     searchCities: suspend (String) -> List<CityOption>,
-): CommandHandler<SearchCitiesCommand, CitySearchAction> = commandHandler(
+): CommandHandler<SearchCities, CitySearchAction> = commandHandler(
     onFailure = { request, _ ->
         CitySearchAction.Failed(request.revision, "Could not load cities. Try again.")
     },

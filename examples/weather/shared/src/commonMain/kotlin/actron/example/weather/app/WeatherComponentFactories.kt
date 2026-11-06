@@ -14,7 +14,7 @@ import actron.example.weather.feature.cities.presentation.CitySearchComponent
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.cities.presentation.CitySearchState
 import actron.example.weather.feature.cities.presentation.DefaultCitySearchComponent
-import actron.example.weather.feature.cities.presentation.SearchCitiesCommand
+import actron.example.weather.feature.cities.presentation.SearchCities
 import actron.example.weather.feature.cities.presentation.citySearchHandler
 import actron.example.weather.feature.weather.domain.HourlyForecastRepository
 import actron.example.weather.feature.weather.domain.WeatherRepository
@@ -30,7 +30,7 @@ class DefaultCitySearchComponentFactory(
     private val coroutineContext: CoroutineContext,
     private val session: WeatherSession,
     private val settingsAction: @androidx.compose.runtime.Composable () -> Unit = {},
-    private val recording: MachineRecording<CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent> = MachineRecording { _, _, handler -> MachineDiagnostics(handler) },
+    private val recording: MachineRecording<CitySearchState, CitySearchAction, SearchCities, NoEvent> = MachineRecording { _, _, handler -> MachineDiagnostics(handler) },
 ) : CitySearchComponent.Factory {
     override fun create(
         componentContext: ComponentContext,

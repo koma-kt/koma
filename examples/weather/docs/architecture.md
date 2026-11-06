@@ -45,7 +45,7 @@ Start with [CitySearchMachine.kt](../shared/src/commonMain/kotlin/actron/example
 | --- | --- |
 | `CitySearchState` | Sealed screen state. Each variant carries the query and revision |
 | `CitySearchAction` | User edits and typed operation results |
-| `SearchCitiesCommand` | Data describing a search to run; contains no HTTP implementation |
+| `SearchCities` | Data describing a search to run; contains no HTTP implementation |
 | `typedStateMachine` | Builds the search graph and its executable rules together |
 | `state<T>` | Declares a graph node and its transitions |
 | `on<Action> { guard; target }` | Declares one action edge; destination comes from target's return type |

@@ -6,7 +6,7 @@ import actron.core.InputAttribution
 import actron.example.weather.core.domain.City
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.cities.presentation.CitySearchState
-import actron.example.weather.feature.cities.presentation.SearchCitiesCommand
+import actron.example.weather.feature.cities.presentation.SearchCities
 import actron.observability.FailureDescriptor
 import actron.statechart.machine.Decision
 import actron.statechart.machine.DecisionObserver
@@ -28,7 +28,7 @@ sealed interface WeatherRoute {
 }
 
 data class WeatherFrame(
-    val search: ExecutorCheckpoint<CitySearchState, SearchCitiesCommand> = ExecutorCheckpoint.initial(CitySearchMachine.create().initialSnapshot(CitySearchState.Idle())),
+    val search: ExecutorCheckpoint<CitySearchState, SearchCities> = ExecutorCheckpoint.initial(CitySearchMachine.create().initialSnapshot(CitySearchState.Idle())),
     val route: WeatherRoute = WeatherRoute.Search,
 ) {
     fun at(time: MachineTime): WeatherFrame =
@@ -87,7 +87,7 @@ class WeatherSession(
             WeatherRoute.Search -> freshWeather(city)
         }
 
-    internal fun updateSearch(checkpoint: ExecutorCheckpoint<CitySearchState, SearchCitiesCommand>) {
+    internal fun updateSearch(checkpoint: ExecutorCheckpoint<CitySearchState, SearchCities>) {
         frame = frame.copy(search = checkpoint)
     }
 

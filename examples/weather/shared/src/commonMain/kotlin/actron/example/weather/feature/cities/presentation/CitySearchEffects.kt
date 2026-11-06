@@ -11,7 +11,7 @@ import actron.statechart.machine.commandHandler
  */
 fun citySearchHandler(
     repository: CitySearchRepository,
-): CommandHandler<SearchCitiesCommand, CitySearchAction> =
+): CommandHandler<SearchCities, CitySearchAction> =
     commandHandler(
         onFailure = { request, _ -> CitySearchAction.Failed(request.revision, "Could not load cities. Try again.") },
     ) { request ->
