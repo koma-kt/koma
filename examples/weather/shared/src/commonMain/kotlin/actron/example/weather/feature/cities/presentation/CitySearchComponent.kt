@@ -5,8 +5,6 @@ import actron.example.weather.core.component.BaseComponent
 import actron.example.weather.core.component.BridgeEndpoint
 import actron.example.weather.core.domain.City
 import actron.example.weather.core.mvi.NoEvent
-import actron.example.weather.feature.cities.data.LocalCitySearchRepository
-import actron.statechart.machine.MachineSnapshot
 import actron.statechart.machine.MachineStore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,7 +18,7 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
 
 interface CitySearchComponent : BaseComponent {
-    val state: StateFlow<MachineSnapshot<CitySearchState>>
+    val state: StateFlow<CitySearchUiState>
 
     fun onUiEvent(event: CitySearchIntent)
 
@@ -47,28 +45,24 @@ class DefaultCitySearchComponent(
 ) : CitySearchComponent,
     ComponentContext by componentContext {
     private val scope = CoroutineScope(coroutineContext + SupervisorJob())
-    override val state = store.state
+    override val state: StateFlow<CitySearchUiState> = CitySearchUiStateFlow(store.state)
 
     init {
         lifecycle.doOnDestroy { scope.cancel() }
     }
 
     override fun onUiEvent(event: CitySearchIntent) {
-        if (!state.value.isStarted) return
-        when (event) {
-            // Enqueue an intent; the machine is the only writer of the search context.
-            is CitySearchIntent.QueryChanged -> store.dispatch(CitySearchAction.ChangeQuery(event.query))
-
-            CitySearchIntent.Retry -> store.dispatch(CitySearchAction.ChangeQuery(state.value.context.query))
-
-            is CitySearchIntent.SelectCity -> scope.launch { endpoint.news.emit(CitySearchComponent.News.CitySelected(event.city)) }
+        val snapshot = store.state.value
+        if (!snapshot.isStarted) return
+        when (val command = event.toCommand(snapshot.context)) {
+            is CitySearchUiCommand.Dispatch -> store.dispatch(command.action)
+            is CitySearchUiCommand.Publish -> scope.launch { endpoint.news.emit(command.news) }
         }
     }
 
     @Composable
     override fun Render() {
-        val snapshot by state.collectAsUiState()
-        val controls = if (snapshot.isStarted) CitySearchControls.Interactive else CitySearchControls.ReadOnly
-        CitySearchScreen(snapshot.context, controls, onIntent = ::onUiEvent, settingsAction = settingsAction)
+        val uiState by state.collectAsUiState()
+        CitySearchScreen(uiState = uiState, onIntent = ::onUiEvent, settingsAction = settingsAction)
     }
 }

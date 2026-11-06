@@ -10,6 +10,7 @@ import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.domain.CityOption
 import actron.example.weather.feature.cities.domain.CitySearchRepository
 import actron.example.weather.feature.cities.presentation.CitySearchState
+import actron.example.weather.feature.cities.presentation.toUiState
 import actron.example.weather.feature.weather.data.SampleHourlyRepository
 import actron.example.weather.feature.weather.data.SampleWeatherRepository
 import actron.example.weather.feature.weather.domain.WeatherReading
@@ -105,7 +106,7 @@ class WeatherAppTest {
             setContent {
                 androidx.compose.material3.MaterialTheme {
                     actron.example.weather.feature.cities.presentation
-                        .CitySearchScreen(ui.value, onIntent = {})
+                        .CitySearchScreen(uiState = ui.value.toUiState(), onIntent = {})
                 }
             }
             onNodeWithTag("city-search-debounce").assertIsDisplayed()

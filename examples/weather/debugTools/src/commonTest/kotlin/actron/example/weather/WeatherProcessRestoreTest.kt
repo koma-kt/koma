@@ -5,12 +5,10 @@ package actron.example.weather
 import actron.example.weather.app.debug.DebugWeatherRootComponent
 import actron.example.weather.app.debug.WeatherHistory
 import actron.example.weather.core.fixtures.demoCities
-import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.weather.domain.*
 import actron.example.weather.feature.weather.presentation.*
-import actron.example.weather.feature.weatheradvice.presentation.WeatherAdvicePhase
 import com.arkivanov.decompose.DefaultComponentContext
 import com.arkivanov.essenty.instancekeeper.InstanceKeeperDispatcher
 import com.arkivanov.essenty.instancekeeper.getOrCreate
@@ -73,8 +71,9 @@ class WeatherProcessRestoreTest {
                         .getChildStack()
                         .value.active.instance,
                 ).state.value
-            assertIs<RequestState.Success<WeatherReading>>(oldWeather.current)
-            assertEquals(RequestState.Loading, oldWeather.hourly)
+            assertEquals(listOf(20), oldWeather.temperature.arguments)
+            assertTrue(oldWeather.forecast.isEmpty())
+            assertEquals(1, oldWeather.forecastStatus.size)
             assertEquals(2, currentCalls)
             assertEquals(1, forecastCalls)
             repeat(2) {
@@ -121,10 +120,10 @@ class WeatherProcessRestoreTest {
                         .getChildStack()
                         .value.active.instance,
                 )
-            assertEquals("Lis", restoredSearch.state.value.context.query)
+            assertEquals("Lis", restoredSearch.state.value.query)
             restoredSearch.onUiEvent(CitySearchIntent.QueryChanged("Tokyo"))
             testScheduler.runCurrent()
-            assertEquals("Tokyo", restoredSearch.state.value.context.query)
+            assertEquals("Tokyo", restoredSearch.state.value.query)
             lifecycle.destroy()
             keeper.destroy()
         }
@@ -162,11 +161,15 @@ class WeatherProcessRestoreTest {
                         .getChildStack()
                         .value.active.instance,
                 )
-            assertIs<WeatherAdvicePhase.Visible>(weather.state.value.advice)
+            assertTrue(
+                weather.state.value.advice
+                    .isNotEmpty(),
+            )
             weather.onUiEvent(event = CityWeatherIntent.DismissAdvice)
             testScheduler.runCurrent()
             val expected = weather.state.value
-            assertEquals(expected = WeatherAdvicePhase.Dismissed, actual = expected.advice)
+            assertTrue(expected.advice.isEmpty())
+            assertTrue(expected.adviceActions.isEmpty())
             val bytes = Json.encodeToString(SerializableContainer.serializer(), state.save())
             lifecycle.destroy()
             keeper.destroy()

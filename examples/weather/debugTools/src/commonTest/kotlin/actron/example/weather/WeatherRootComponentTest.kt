@@ -127,17 +127,17 @@ class WeatherRootComponentTest {
                     root
                         .getChildStack()
                         .value.active.instance as actron.example.weather.feature.weather.presentation.CityWeatherComponent
-                assertEquals(demoCities[1], weather.state.value.city)
+                assertEquals(demoCities[1].name, weather.state.value.city)
                 weather.onUiEvent(actron.example.weather.feature.weather.presentation.CityWeatherIntent.Back)
                 testScheduler.runCurrent()
                 val restored =
                     root
                         .getChildStack()
                         .value.active.instance as CitySearchComponent
-                assertEquals("Lis", restored.state.value.context.query)
+                assertEquals("Lis", restored.state.value.query)
                 restored.onUiEvent(CitySearchIntent.QueryChanged("Paris"))
                 testScheduler.runCurrent()
-                assertEquals("Paris", restored.state.value.context.query)
+                assertEquals("Paris", restored.state.value.query)
                 assertTrue(
                     history.timeline.entries.value
                         .all { it.machine.stableId in setOf("city-search", "city-weather", "current-weather", "hourly-forecast", "weather-advice") },
@@ -148,14 +148,14 @@ class WeatherRootComponentTest {
                     root
                         .getChildStack()
                         .value.active.instance as CitySearchComponent
-                assertEquals("Lis", pastSearch.state.value.context.query)
+                assertEquals("Lis", pastSearch.state.value.query)
                 root.continueFrom(entry.snapshot)
                 testScheduler.runCurrent()
                 val pastWeather =
                     root
                         .getChildStack()
                         .value.active.instance as actron.example.weather.feature.weather.presentation.CityWeatherComponent
-                assertEquals(demoCities[1], pastWeather.state.value.city)
+                assertEquals(demoCities[1].name, pastWeather.state.value.city)
                 assertEquals(2, currentCalls, "Restoring the weather screen retains completed current weather")
                 assertEquals(3, hourlyCalls, "Restoring the weather screen restarts only the pending forecast")
             } finally {
@@ -244,7 +244,7 @@ class WeatherRootComponentTest {
                             .getChildStack()
                             .value.active.instance,
                     )
-                assertEquals("Lisbon", weather.state.value.city.name)
+                assertEquals("Lisbon", weather.state.value.city)
                 assertEquals(initialCalls + 2, requests.size)
                 weather.onUiEvent(actron.example.weather.feature.weather.presentation.CityWeatherIntent.Back)
                 testScheduler.runCurrent()
@@ -252,7 +252,7 @@ class WeatherRootComponentTest {
                     root
                         .getChildStack()
                         .value.active.instance as CitySearchComponent
-                assertEquals("Lis", restoredSearch.state.value.context.query)
+                assertEquals("Lis", restoredSearch.state.value.query)
                 restoredSearch.onUiEvent(CitySearchIntent.SelectCity(demoCities[2]))
                 restoredSearch.onUiEvent(CitySearchIntent.SelectCity(demoCities[2]))
                 testScheduler.runCurrent()
@@ -297,7 +297,7 @@ class WeatherRootComponentTest {
                         .value.active.instance as CitySearchComponent
                 search.onUiEvent(CitySearchIntent.QueryChanged("Lis"))
                 testScheduler.runCurrent()
-                assertEquals("Lis", search.state.value.context.query)
+                assertEquals("Lis", search.state.value.query)
                 search.onUiEvent(CitySearchIntent.SelectCity(demoCities[1]))
                 testScheduler.runCurrent()
                 kotlin.test.assertIs<actron.example.weather.feature.weather.presentation.CityWeatherComponent>(
@@ -318,7 +318,7 @@ class WeatherRootComponentTest {
                         .getChildStack()
                         .value.active.instance,
                 )
-                assertEquals("Lis", search.state.value.context.query)
+                assertEquals("Lis", search.state.value.query)
                 val saved = stateKeeper.save()
                 lifecycle.destroy()
 
@@ -346,7 +346,7 @@ class WeatherRootComponentTest {
                         recreated
                             .getChildStack()
                             .value.active.instance as CitySearchComponent
-                    ).state.value.context.query,
+                    ).state.value.query,
                 )
                 recreatedLifecycle.destroy()
             } finally {
