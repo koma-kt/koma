@@ -6,7 +6,6 @@ import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.weather.domain.HourlyForecast
-import actron.statechart.machine.BehaviorStateBuilder
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
 import actron.statechart.machine.Machine
@@ -17,10 +16,39 @@ import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.seconds
 
 @Serializable
-data class HourlyForecastState(
-    val city: City,
-    val phase: RequestState<HourlyForecast> = RequestState.Ready,
-)
+sealed interface HourlyForecastState {
+    val city: City
+
+    @Serializable
+    data class Ready(
+        override val city: City,
+    ) : HourlyForecastState
+
+    @Serializable
+    data class Loading(
+        override val city: City,
+    ) : HourlyForecastState
+
+    @Serializable
+    data class Success(
+        override val city: City,
+        val forecast: HourlyForecast,
+    ) : HourlyForecastState
+
+    @Serializable
+    data class Error(
+        override val city: City,
+        val cause: RequestFailure,
+    ) : HourlyForecastState
+}
+
+fun HourlyForecastState.toRequestState(): RequestState<HourlyForecast> =
+    when (this) {
+        is HourlyForecastState.Ready -> RequestState.Ready
+        is HourlyForecastState.Loading -> RequestState.Loading
+        is HourlyForecastState.Success -> RequestState.Success(forecast)
+        is HourlyForecastState.Error -> RequestState.Error(cause)
+    }
 
 @Serializable
 sealed interface HourlyForecastAction : Action {
@@ -47,35 +75,31 @@ object HourlyForecastMachine {
     fun create(): Machine<HourlyForecastState, HourlyForecastAction, LoadHourlyForecast, NoEvent> =
         behaviorStateMachine(
             id = DefinitionId(value = "hourly-forecast"),
-            version = DefinitionVersion(value = "3"),
-            initial = RequestState.Ready,
-            phaseOf = { state: HourlyForecastState -> state.phase },
+            version = DefinitionVersion(value = "4"),
+            initialType = HourlyForecastState.Ready::class,
             build = {
-                val refresh: BehaviorStateBuilder<HourlyForecastState, HourlyForecastAction, LoadHourlyForecast, NoEvent>.() -> Unit = {
-                    on<HourlyForecastAction.Refresh> { transitionTo(state = state.copy(phase = RequestState.Loading)) }
-                    on<HourlyForecastAction.Retry> { transitionTo(state = state.copy(phase = RequestState.Loading)) }
-                }
-                state<RequestState.Ready>(build = refresh)
-                state<RequestState.Loading>(build = {
-                    refresh()
+                on<HourlyForecastAction.Refresh> { target(HourlyForecastState.Loading(state.city)) }
+                on<HourlyForecastAction.Retry> { target(HourlyForecastState.Loading(state.city)) }
+                state<HourlyForecastState.Ready>()
+                state<HourlyForecastState.Loading>(build = {
                     onEnter {
                         withTimeoutOrNull<Unit>(timeout = 8.seconds) {
                             command(command = LoadHourlyForecast(city = state.city))
                             awaitCancellation()
                         }
-                        transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Timeout)))
+                        target(HourlyForecastState.Error(state.city, cause = RequestFailure.Timeout))
                     }
                     on<HourlyForecastAction.Loaded> { action ->
                         if (action.forecast.city == state.city) {
-                            transitionTo(state = state.copy(phase = RequestState.Success(value = action.forecast)))
+                            target(HourlyForecastState.Success(state.city, action.forecast))
                         }
                     }
                     on<HourlyForecastAction.Failed> { action ->
-                        transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Unavailable(message = action.message))))
+                        target(HourlyForecastState.Error(state.city, cause = RequestFailure.Unavailable(message = action.message)))
                     }
                 })
-                state<RequestState.Success<HourlyForecast>>(build = refresh)
-                state<RequestState.Error>(build = refresh)
+                state<HourlyForecastState.Success>()
+                state<HourlyForecastState.Error>()
             },
         )
 }

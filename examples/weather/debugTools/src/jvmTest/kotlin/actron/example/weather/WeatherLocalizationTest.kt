@@ -7,7 +7,6 @@ import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.presentation.CitySearchScreen
 import actron.example.weather.feature.cities.presentation.CitySearchState
-import actron.example.weather.feature.cities.presentation.toUiState
 import actron.example.weather.feature.weather.domain.ForecastHour
 import actron.example.weather.feature.weather.domain.HourlyForecast
 import actron.example.weather.feature.weather.domain.WeatherAdvice
@@ -33,7 +32,7 @@ class WeatherLocalizationTest {
                 current = RequestState.Success(value = WeatherReading(city = city, temperature = 18.0, feelsLike = 16.0, wind = 12.0, code = 0, time = "12:00")),
                 hourly = RequestState.Success(value = HourlyForecast(city = city, hours = listOf(ForecastHour(time = "12:00", temperature = 18.0, wind = 12.0, rainChance = 25)))),
             ).toUiState(enabled = true)
-        val search = CitySearchState(phase = RequestState.Error(cause = RequestFailure.Timeout)).toUiState(enabled = true)
+        val search = CitySearchState.Error("Tokyo", 1, RequestFailure.Timeout)
         val original: Locale = Locale.getDefault()
         try {
             for (expectation in listOf(

@@ -44,16 +44,17 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class InvocationPersistenceTest {
-    @Serializable private sealed interface Phase {
-        @Serializable data object Idle : Phase
+    @Serializable private sealed interface Parent {
+        val seed: Int
 
-        @Serializable data object Active : Phase
+        @Serializable data class Idle(
+            override val seed: Int = 7,
+        ) : Parent
+
+        @Serializable data class Active(
+            override val seed: Int,
+        ) : Parent
     }
-
-    @Serializable private data class Parent(
-        val phase: Phase = Phase.Idle,
-        val seed: Int = 7,
-    )
 
     @Serializable private sealed interface Act : Action {
         @Serializable data object Open : Act
@@ -68,12 +69,10 @@ class InvocationPersistenceTest {
     private fun composition(
         parentVersion: String = "1",
         childVersion: String = "1",
-    ) = typedInvokedMachine<Parent, Phase, Act, String, Finished, Int, Finish, String, Finished>(
+    ) = typedInvokedMachine<Parent, Act, String, Finished, Int, Finish, String, Finished>(
         DefinitionId("parent"),
         DefinitionVersion(parentVersion),
-        Phase.Idle,
-        readState = { it.phase },
-        writeState = { c, phase -> c.copy(phase = phase) },
+        Parent.Idle(),
         child =
             stateMachine(DefinitionId("child"), DefinitionVersion(childVersion), StateId("Working")) {
                 state(StateId("Working")) {
@@ -89,11 +88,11 @@ class InvocationPersistenceTest {
                 state(StateId("Done")) {}
             },
     ) { child ->
-        state(Phase.Idle) { on<Act.Open, Phase.Active>() }
-        state(Phase.Active) {
+        state<Parent.Idle>(enter = { Parent.Idle(it.seed) }) { on<Act.Open, Parent.Active>() }
+        state<Parent.Active>(enter = { Parent.Active(it.seed) }) {
             onEnter { command("parent-work") }
-            on<Act.Open, Phase.Active>()
-            on<Act.Close, Phase.Idle>()
+            on<Act.Open, Parent.Active>()
+            on<Act.Close, Parent.Idle>()
             invoke(child, context = { it.context.seed }, toParent = { _, send -> send(Act.Close) })
         }
     }
@@ -116,7 +115,7 @@ class InvocationPersistenceTest {
 
     private fun opened(): InvocationCheckpoint<Parent, String, Int, String> {
         val machine = composition()
-        val start = machine.decide(machine.initialSnapshot(Parent()), InvocationInput.Parent(MachineInput.Start(MachineTime.Zero)))
+        val start = machine.decide(machine.initialSnapshot(Parent.Idle()), InvocationInput.Parent(MachineInput.Start(MachineTime.Zero)))
         return checkpoint(machine.decide(start.snapshot, InvocationInput.Parent(MachineInput.Dispatch(Act.Open, MachineTime.Zero))), MachineTime(4.seconds))
     }
 
@@ -124,7 +123,7 @@ class InvocationPersistenceTest {
     fun restoresFreshDormantAndActiveInvocationThenRoutesResultsAndRejectsOldOwner() {
         val machine = composition()
         val persistence = invocationPersistence(machine)
-        val fresh = InvocationCheckpoint<Parent, String, Int, String>(ExecutorCheckpoint.initial(machine.parent.initialSnapshot(Parent())))
+        val fresh = InvocationCheckpoint<Parent, String, Int, String>(ExecutorCheckpoint.initial(machine.parent.initialSnapshot(Parent.Idle())))
         val restoredFresh = persistence.restore(persistence.save(fresh))
         val start = machine.decide(restoredFresh.snapshot, InvocationInput.Parent(MachineInput.Start(MachineTime.Zero)))
         val dormant = persistence.restore(persistence.save(checkpoint(start)))
@@ -186,7 +185,7 @@ class InvocationPersistenceTest {
                     ),
                 ),
             )
-        assertEquals(Phase.Idle, finished.snapshot.parent.context.phase)
+        assertIs<Parent.Idle>(finished.snapshot.parent.context)
         assertEquals(ChildInvocation.Dormant, finished.snapshot.child)
         assertEquals(next.owner, finished.childCancellations.single().owner)
         val closed = persistence.restore(persistence.save(checkpoint(finished, again.parent.now)))
@@ -236,7 +235,7 @@ class InvocationPersistenceTest {
                 ),
             )
         assertEquals(ChildInvocation.Dormant, finished.snapshot.child)
-        assertEquals(Phase.Idle, finished.snapshot.parent.context.phase)
+        assertIs<Parent.Idle>(finished.snapshot.parent.context)
     }
 
     @Test
@@ -250,7 +249,7 @@ class InvocationPersistenceTest {
         assertTrue(child.checkpoint.remaining(timer) { assertEquals(6.seconds, it) })
         val result = composition().decide(restored.snapshot, InvocationInput.Child(child.owner, MachineInput.TimerFired(timer, MachineTime(10.seconds))))
         assertIs<DecisionOutcome.Handled>(result.outcome)
-        assertEquals(Phase.Idle, result.snapshot.parent.context.phase)
+        assertIs<Parent.Idle>(result.snapshot.parent.context)
         assertEquals(ChildInvocation.Dormant, result.snapshot.child)
         assertEquals(ChildCheckpoint.Dormant, persistence.restore(persistence.save(checkpoint(result, MachineTime(10.seconds)))).child)
     }
@@ -288,7 +287,7 @@ class InvocationPersistenceTest {
         assertFailsWith<IllegalArgumentException> { persistence.save(active.copy(parent = active.parent.copy(effects = listOf(PendingEffect(EffectId(1), Finished, EffectPolicy.Retained(), 0, false))))) }
         val freshChild = ExecutorCheckpoint.initial<Int, String>(composition().child.initialSnapshot(7))
         assertFailsWith<IllegalArgumentException> { persistence.save(active.copy(child = child.copy(checkpoint = freshChild))) }
-        val dormant = InvocationCheckpoint<Parent, String, Int, String>(ExecutorCheckpoint.initial(composition().parent.initialSnapshot(Parent())))
+        val dormant = InvocationCheckpoint<Parent, String, Int, String>(ExecutorCheckpoint.initial(composition().parent.initialSnapshot(Parent.Idle())))
         assertFailsWith<IllegalArgumentException> { invocationPersistence(composition(childVersion = "2")).restore(persistence.save(dormant)) }
     }
 

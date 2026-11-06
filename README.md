@@ -37,7 +37,7 @@ and dependency APIs are normalized at their boundaries; see the
 ## 1. A Store for a counter
 
 `behaviorStateMachine` declares handlers inside their state. Read the immutable `state` and
-propose its replacement with `transitionTo`. No separate node IDs or reducer registration
+propose its replacement with `target`. No separate node IDs or reducer registration
 strings are needed.
 
 ```kotlin
@@ -59,10 +59,10 @@ val counterMachine = behaviorStateMachine<CounterState, CounterAction, Nothing, 
 ) {
     state<CounterState> {
         on<CounterAction.Increment> {
-            transitionTo(state = state.copy(count = state.count + 1))
+            target(state = state.copy(count = state.count + 1))
         }
         on<CounterAction.Decrement> {
-            transitionTo(state = state.copy(count = (state.count - 1).coerceAtLeast(0)))
+            target(state = state.copy(count = (state.count - 1).coerceAtLeast(0)))
         }
     }
 }
@@ -122,7 +122,7 @@ For streams with multiple results, use the lower-level `CommandHandler` callback
 In the behavior DSL, `on<Action>` is synchronous and transactional; `onEnter` runs outside
 that transaction and may suspend. Use ordinary Kotlin conditions and `delay`. Entry work
 belongs to the state activation and is cancelled on exit. `state` stays the snapshot captured
-at handler entry; `transitionTo` does not mutate it. Even a same-state transition exits and
+at handler entry; `target` does not mutate it. Even a same-state transition exits and
 re-enters, restarting entry work.
 
 See the [behavior DSL contract](actron-statechart/README.md#state-local-kotlin-behavior)
@@ -157,7 +157,7 @@ feature's behaviour.
 
 | Shape | Example | Actron representation |
 |---|---|---|
-| One state with changing data | A counter or an editable form | `behaviorStateMachine`, `on<Action>` and `transitionTo` |
+| One state with changing data | A counter or an editable form | `behaviorStateMachine`, `on<Action>` and `target` |
 | Flat, mutually exclusive phases | Idle → Loading → Content or Error | `typedStateMachine`; `on<Action> { target { ... } }` declares each graph edge |
 | Hierarchical phases | Connected contains Idle and ChatOpen | `compound<Parent>`; one active child at a time |
 | Parallel phases | Connection status and upload status evolve independently | `parallelStateMachine` regions, or nested `parallel<Parent>` |
@@ -171,22 +171,22 @@ for explicit graph declarations, shared context bindings, hierarchy and history.
 `typedStateMachine` remains useful when static transition structure is part of the model;
 behavior handlers use ordinary Kotlin and expose a conservative graph of possible targets.
 
-Declare a destination once, with an optional condition and context update:
+Declare a destination once, with an optional guard:
 
 ```kotlin
-state<RequestState.Loading> {
+state<CitySearchState.Loading> {
     on<CitySearchAction.Found> {
         guard { action -> action.revision == state.revision }
-        target { action -> RequestState.Success(value = action.results) }
+        target { action -> CitySearchState.Success(state.query, state.revision, action.results) }
     }
     after(8.seconds) {
-        target { RequestState.Error(cause = RequestFailure.Timeout) }
+        target { CitySearchState.Error(state.query, state.revision, RequestFailure.Timeout) }
     }
 }
 ```
 
-The return type of `target` supplies the graph destination. Use `update { action ->
-state.copy(...) }` when the transition also changes shared data; `target` owns the phase.
+The return type of `target` supplies the graph destination. Its value is the entire next state.
+Only parallel regions bind an individual field through `readState` and `writeState`.
 See the [transition guide](actron-statechart/README.md#declaring-a-transition-with-one-target-type)
 and the complete [city search machine](examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt).
 

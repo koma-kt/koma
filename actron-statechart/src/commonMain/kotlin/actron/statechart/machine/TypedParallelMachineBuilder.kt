@@ -39,23 +39,22 @@ class TypedParallelMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E : E
             val id = StateId("${root.value}.$name")
             require(regions.add(id)) { "Region types must have unique names: $name" }
             val builder = TypedStateMachineBuilder(readState, writeState, implementation, transitions, nodes, id, "${id.value}.").apply(build)
-            nodes += CompoundState(id, initial = builder.finish(initial), parent = root)
+            nodes += CompoundState(id, initial = builder.finish(initial, validateBeforeStart = false), parent = root)
         }
 
         inline fun <reified T : A, reified Target : S> on() = handlers.on<T, Target>()
 
         inline fun <reified Target : S> onDone(
             noinline guard: (C) -> Boolean = { true },
-            noinline reduce: (C) -> C = { it },
-        ) = handlers.onDone<Target>(guard, reduce)
+        ) = handlers.onDone<Target>(guard)
 
         fun transitions(build: TypedMachineStateBuilder<C, S, A, CMD, E>.() -> Unit) {
             handlers.apply(build)
         }
 
-        fun onEnter(block: MachineEnterScope<C, A, CMD, E>.() -> Unit) = handlers.onEnter(block)
+        fun onEnter(block: StateEnterScope<C, A, CMD, E>.() -> Unit) = handlers.onEnter(block)
 
-        fun onExit(block: MachineExitScope<C, A, E>.() -> Unit) = handlers.onExit(block)
+        fun onExit(block: StateHookScope<C, A, E>.() -> Unit) = handlers.onExit(block)
 
         internal fun finish() {
             require(regions.size >= 2) { "A parallel state needs at least two regions" }

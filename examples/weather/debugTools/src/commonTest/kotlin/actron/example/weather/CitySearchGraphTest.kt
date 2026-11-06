@@ -1,8 +1,6 @@
 package actron.example.weather
 
 import actron.example.weather.core.mvi.RequestFailure
-import actron.example.weather.core.mvi.RequestState
-import actron.example.weather.feature.cities.domain.CityOption
 import actron.example.weather.feature.cities.presentation.CitySearchAction
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.cities.presentation.CitySearchState
@@ -34,12 +32,12 @@ class CitySearchGraphTest {
     fun guardCoverageRecordsStaleAndCurrentReplies() =
         runTest {
             val report =
-                CitySearchMachine.create().test(scope = this, initial = CitySearchState()) {
+                CitySearchMachine.create().test(scope = this, initial = CitySearchState.Idle()) {
                     dispatch(action = CitySearchAction.ChangeQuery(query = "Paris"))
                     advanceTimeBy(duration = 350.milliseconds)
                     dispatch(action = CitySearchAction.Found(revision = 0, results = emptyList()))
                     dispatch(action = CitySearchAction.Failed(revision = 0, message = "old"))
-                    expectState<RequestState.Loading>(select = { it.phase })
+                    expectState<CitySearchState.Loading>()
                     completeCommand(result = { CitySearchAction.Found(revision = it.revision, results = emptyList()) })
                     dispatch(action = CitySearchAction.ChangeQuery(query = "London"))
                     advanceTimeBy(duration = 350.milliseconds)
@@ -69,8 +67,8 @@ class CitySearchGraphTest {
         checkRestoration(
             elapsed = 200.milliseconds,
             remaining = 150.milliseconds,
-            before = RequestState.Debouncing,
-            after = RequestState.Loading,
+            before = CitySearchState.Debouncing("Paris", 1),
+            after = CitySearchState.Loading("Paris", 1),
             commands = 1,
         )
 
@@ -79,20 +77,20 @@ class CitySearchGraphTest {
         checkRestoration(
             elapsed = 8150.milliseconds,
             remaining = 200.milliseconds,
-            before = RequestState.Loading,
-            after = RequestState.Error(cause = RequestFailure.Timeout),
+            before = CitySearchState.Loading("Paris", 1),
+            after = CitySearchState.Error("Paris", 1, cause = RequestFailure.Timeout),
             commands = 0,
         )
 
     private fun checkRestoration(
         elapsed: Duration,
         remaining: Duration,
-        before: RequestState<List<CityOption>>,
-        after: RequestState<List<CityOption>>,
+        before: CitySearchState,
+        after: CitySearchState,
         commands: Int,
     ) = runTest {
         val machine = CitySearchMachine.create()
-        val original = MachineTestDriver(machine = machine, context = CitySearchState(), scope = this)
+        val original = MachineTestDriver(machine = machine, context = CitySearchState.Idle(), scope = this)
         val checkpoint =
             try {
                 original.start()
@@ -101,13 +99,13 @@ class CitySearchGraphTest {
             } finally {
                 original.close()
             }
-        val resumed = MachineTestDriver(machine = machine, context = CitySearchState(), scope = this, checkpoint = checkpoint)
+        val resumed = MachineTestDriver(machine = machine, context = CitySearchState.Idle(), scope = this, checkpoint = checkpoint)
         try {
             resumed.start()
             resumed.advanceBy(duration = remaining - 1.milliseconds)
-            assertEquals(expected = before, actual = resumed.snapshot.context.phase)
+            assertEquals(expected = before, actual = resumed.snapshot.context)
             resumed.advanceBy(duration = 1.milliseconds)
-            assertEquals(expected = after, actual = resumed.snapshot.context.phase)
+            assertEquals(expected = after, actual = resumed.snapshot.context)
             assertEquals(expected = commands, actual = resumed.runningCommands.size)
             resumed.send(action = CitySearchAction.ChangeQuery(query = ""))
             resumed.assertNoPendingWork()

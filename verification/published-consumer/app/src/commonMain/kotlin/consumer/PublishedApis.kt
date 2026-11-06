@@ -41,8 +41,8 @@ val machine =
         Counter(),
     ) {
         state<Counter> {
-            on<Increment, Counter> { context, _ -> context.copy(count = context.count + 1) }
-            onEnter { if (context.count > 0) command(SendPing) }
+            on<Increment> { target { state.copy(count = state.count + 1) } }
+            onEnter { if (state.count > 0) command(SendPing) }
         }
     }
 

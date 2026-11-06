@@ -234,25 +234,9 @@ val transitions = listOf(
 ## State-local Kotlin behavior
 
 `behaviorStateMachine` offers `state<Phase>`, `on<Action>`, suspend `onEnter`, and
-`transitionTo(state = ...)` on the same decision engine. In both handler scopes, `val state`
-is the complete immutable application snapshot captured at invocation. It has no setter;
-propose a replacement with `transitionTo`, or use `updateState` in an action handler to
-change data while preserving the current phase and its running work. The scope keeps
-reading the original snapshot even after that call. Keep values deeply immutable.
-
-For a wrapper such as `CitySearchState(query, phase, revision)`, supply
-`phaseOf = { state: CitySearchState -> state.phase }`. This selects the graph node without a
-write lens. For a state hierarchy used directly as the snapshot, omit `phaseOf`.
-
-```kotlin
-on<CitySearchAction.ChangeQuery> { action ->
-    transitionTo(state = state.copy(
-        query = action.query,
-        revision = state.revision + 1,
-        phase = RequestState.QueryChanged,
-    ))
-}
-```
+`target(state = ...)` on the same decision engine. In both handler scopes, `val state`
+is the complete immutable state captured at invocation. Each action handler can propose
+one full replacement. The runtime uses its concrete type to select the destination.
 
 Declare shared actions with `on<Action>` directly in `behaviorStateMachine` to avoid
 repeating the same handler in every state. A matching state-local handler always wins,
@@ -262,13 +246,9 @@ transition still consumes the action. Among shared handlers, the first match win
 
 ```kotlin
 on<CitySearchAction.ChangeQuery> { action ->
-    transitionTo(state = state.copy(
-        query = action.query,
-        revision = state.revision + 1,
-        phase = RequestState.QueryChanged,
-    ))
+    target(CitySearchState.QueryChanged(action.query, state.revision + 1))
 }
-state<RequestState.Loading> {
+state<CitySearchState.Loading> {
     // Only loading-specific responses belong here.
 }
 ```
@@ -284,17 +264,15 @@ state<ChatPhase.Connected> {
         }
     }
     on<ChatAction.MessageReceived> { action ->
-        updateState(state = state.copy(messages = state.messages + action.message))
+        target(state = ChatPhase.Connected(state.messages + action.message), kind = TransitionKind.Internal)
     }
 }
 ```
 
-`updateState` cannot change the phase selected by `phaseOf`. It preserves activation,
-entry work, commands and timers. Each action handler may propose exactly one replacement:
-combining updates or an update with a transition fails atomically. `transitionTo` remains
-an explicit exit/re-entry, even when its target has the same phase type.
+An internal target preserves the current state type, activation, commands and timers.
+An external target exits and re-enters even when both values have the same type.
 
-An entry's `state` remains its initial snapshot. A direct `transitionTo` from entry work
+An entry's `state` remains its initial snapshot. A direct `target` from entry work
 is accepted only if the current context still equals that snapshot, as well as matching
 the active entry. Otherwise it is ignored to avoid overwriting newer data. Use `dispatch`
 for results that must merge with current state or choose their destination from it.
@@ -678,14 +656,13 @@ recovery policy. Weather demonstrates ordinary checkpoint restoration without de
 `typedStateMachine` also accepts a rule declaration inside `on<Action>`:
 
 ```kotlin
-state<RequestState.Loading> {
+state<CitySearchState.Loading> {
     on<CitySearchAction.Found> {
         guard { action -> action.revision == state.revision }
-        target { action -> RequestState.Success(value = action.results) }
-        update { action -> state.copy(query = state.query.trim(), revision = state.revision + 1) }
+        target { action -> CitySearchState.Success(state.query, state.revision, action.results) }
     }
     after(delay = 8.seconds, transition = {
-        target { RequestState.Error(cause = RequestFailure.Timeout) }
+        target { CitySearchState.Error(state.query, state.revision, RequestFailure.Timeout) }
     })
 }
 ```
@@ -693,26 +670,14 @@ state<RequestState.Loading> {
 `target`'s inferred Kotlin return type declares the graph destination without executing its
 factory. A target with several constructor arguments uses the same syntax. The returned type
 must identify a declared state, and the returned value must have that exact runtime class.
-`guard` and `update` are optional; each block may be declared only once. A missing `target`
-is a definition error. An omitted guard creates an unconditional edge, not a synthetic guard
-with an impossible false-coverage obligation.
-
-For shared data, use the existing `readState = { it.phase }` and
-`writeState = { state, phase -> state.copy(phase = phase) }` binding. `update` may change the
-other fields but must preserve the selected phase (including its payload). The writer installs
-the target value; the machine validates the resulting phase against its active graph node.
-
-Declaration bodies run once at machine construction. Callback bodies run during decisions:
-guard before exits, target and update after exits, then entry hooks. Target and update both read
-the same pre-update context: target does not read the result of update. This preserves existing
-exit → effect → enter semantics. Keep callbacks pure and contexts immutable; time-dependent
-payloads should come from explicit action/context data. No IO or coroutine is started by a rule.
-Failure rolls back the decision, and a rejected guard never calls target or update.
+`guard` is optional. A declaration requires exactly one `target`. Guards run before exit
+hooks. The target receives the state after exits and builds the complete replacement before
+entry hooks run. Typed entry and exit hooks read the current value through `val state`. A rejected guard skips the target. A failure rolls back the decision.
 
 `always(transition = { ... })` declares a conditional eventless transition; it settles in the
 same decision. `after(delay = ..., transition = { ... })` declares an activation-owned timer;
 exit cancels it and a self-transition restarts it. Checkpoints retain its remaining duration.
-Both use the same `guard / target / update` blocks (their unused input is `Unit`).
+Both use the same `guard / target` blocks (their unused input is `Unit`).
 The same declarations feed graph export, decision explanations and guard-outcome coverage.
 They describe structure; arbitrary Kotlin predicates are not statically proven reachable.
 The previous typed `after<Target>(delay) { ... }` overload is replaced by this declaration;
@@ -738,43 +703,10 @@ val counter = typedStateMachine<CounterState, Increment, Nothing, Nothing>(
 }
 ```
 
-Use the explicit binding below when context also holds data shared between phases.
-
-`typedStateMachine` binds a sealed state value in the context to the graph. Define the
-variants once; separate StateId constants are not needed:
-
-```kotlin
-sealed interface Phase {
-    data object Idle : Phase
-    data object Loading : Phase
-    data class Results(val items: List<String>) : Phase
-}
-data class Context(val phase: Phase = Phase.Idle, val query: String = "")
-
-val machine = typedStateMachine<Context, Phase, Act, Command, Ev>(
-    id, version, initial = Phase.Idle,
-    readState = { it.phase },
-    writeState = { context, phase -> context.copy(phase = phase) },
-) {
-    state<Phase.Idle> {
-        on<Act.Search, Phase.Loading>(
-            reduce = { context, action -> context.copy(query = action.query) },
-        ) { _, _ -> Phase.Loading }
-    }
-    state<Phase.Loading> {
-        onEnter { command(Command.Fetch(context.query)) }
-        on<Act.Loaded, Phase.Results> { _, action -> Phase.Results(action.items) }
-        after(delay = 8.seconds) { target { Phase.Idle } }
-    }
-    state<Phase.Results>()
-}
-```
-
-The optional `reduce` updates shared context first; the final lambda constructs the destination
-state from that updated context. The DSL writes the state value before destination entry hooks
-run. `internal<Act>` can change shared data without exiting the state. An enforced invariant
-rolls back decisions that change the phase type without changing the graph, including mistakes
-in the binding or hooks. It also validates restored snapshots through `checkInvariants`.
+For a sealed root, every variant carries the data needed in that state. A query edit can
+construct `CitySearchState.QueryChanged(action.query, state.revision + 1)` directly.
+A region inside a parallel machine may instead bind a field of the enclosing state.
+The machine checks the active state type when validating snapshots and committing decisions.
 
 UI reads the same sealed value with an exhaustive `when`; normal machine snapshots already
 record it alongside the automatically derived graph configuration. No UI-specific state map
@@ -817,17 +749,15 @@ are required. Rename types/regions only with a definition version bump.
 ## Typed hierarchy, history and completion
 
 The typed builder also supports nested compounds. Compound types identify structural nodes;
-`readState(context)` holds the active **leaf** value. Every leaf in a hierarchical region
+the root state holds the active **leaf** value. Every leaf in a hierarchical region
 provides its value once at entry: `state(Phase.Loading)` for objects, or
 `state<Phase.Results>(enter = { context -> Phase.Results(context.cachedResults) })` for data.
 The entry factory runs before that leaf's user `onEnter` hooks, including on history restore.
-Keep data that must survive leaving a phase in the ordinary context.
+Carry shared data forward in the next state.
 
 ```kotlin
-typedStateMachine<Context, Phase, Action, Command, Event>(
+typedStateMachine<Phase, Action, Command, Event>(
     DefinitionId("weather-session"), DefinitionVersion("1"), Phase.Paused,
-    readState = { it.phase },
-    writeState = { context, phase -> context.copy(phase = phase) },
 ) {
     state(Phase.Paused) {
         onHistory<Action.Resume, Phase.Active>()
@@ -857,13 +787,13 @@ targets that declaration with no history ID or string key. History restores grap
 **not old business data or command results**; enter factories rebuild leaf values from current
 context and ordinary enter hooks run again. This differs from Time Travel inspection/replay.
 
-`onDone<Target>()` fires when the compound completes. `always<Target>(guard = { ... })` fires
+`onDone<Target>()` fires when the compound completes. `alwaysEnter<Target>(guard = { ... })` fires
 without another external action. Automatic microsteps use the existing engine's transactional
 commit and cycle limit. Compound handlers follow the usual inner-before-outer priority.
 Use `transitions { ... }` inside a compound for the full state handler API.
 
 Factory-backed targets use `on<Action, Target>()`, or
-`transition<Action, Target>(guard = { context, action -> ... }, reduce = { context, action -> ... })`.
+`transition<Action, Target>(guard = { state, action -> ... })`.
 `afterEnter<Target>(delay)` uses the target entry factory after a timer. The existing
 `on<Action, Target> { context, action -> Target(...) }` and `after(delay) { target { ... } }`
 remain available for flat states without entry factories. Mixing both ways of supplying a
@@ -916,8 +846,7 @@ history re-enters their initial configurations. Business data remains current in
 ```kotlin
 typedInvokedMachine(
     id = DefinitionId("location"), version = DefinitionVersion("1"),
-    initial = Phase.Idle, readState = { c: Context -> c.phase },
-    writeState = { c, phase -> c.copy(phase = phase) }, child = locationMachine,
+    initial = Phase.Idle, child = locationMachine,
 ) { child ->
     state(Phase.Idle) { on<Action.Open, Phase.Locating>() }
     state(Phase.Locating) {

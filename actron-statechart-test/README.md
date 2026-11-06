@@ -165,14 +165,14 @@ its execution scope in `finally`, including after assertion failures. It returns
 `MachineCoverage` report as the driver. No real HTTP or database operation runs.
 
 ```kotlin
-val coverage = CitySearchMachine.create().test(this, CitySearchState()) {
-    expectState<RequestState.Idle> { it.phase }
+val coverage = CitySearchMachine.create().test(this, CitySearchState.Idle()) {
+    expectState<CitySearchState.Idle>()
     dispatch(CitySearchAction.ChangeQuery("London"))
-    expectState<RequestState.Debouncing> { it.phase }
+    expectState<CitySearchState.Debouncing>()
     advanceTimeBy(350.milliseconds)
-    expectState<RequestState.Loading> { it.phase }
+    expectState<CitySearchState.Loading>()
     completeCommand { command -> CitySearchAction.Found(command.revision, emptyList()) }
-    expectState<RequestState.Success<List<CityOption>>> { it.phase }
+    expectState<CitySearchState.Success>()
 }
 ```
 
@@ -195,7 +195,7 @@ Actron explores executable prefixes through the real pure machine decision funct
 from its initial context. No ordered test script or fabricated command IDs are needed.
 
 ```kotlin
-val model = CitySearchMachine.create().scenarios(CitySearchState()) {
+val model = CitySearchMachine.create().scenarios(CitySearchState.Idle()) {
     actions { snapshot ->
         // Limit the data domain and number of edits, not their order.
         if (snapshot.context.revision < 2) {
@@ -213,8 +213,7 @@ val model = CitySearchMachine.create().scenarios(CitySearchState()) {
     }
     rule("results-belong-to-query") { step ->
         val state = step.after.context
-        val phase = state.phase
-        phase !is RequestState.Success || phase.value.all { it.city.name == state.query }
+        state !is CitySearchState.Success || state.results.all { it.city.name == state.query }
     }
 }
 val generated = model.generate(maxDepth = 6, maxDecisions = 100_000)
@@ -262,7 +261,7 @@ goal("late-moscow-command") { steps ->
         action is CitySearchAction.Found &&
             action.results.any { it.city.name == "Москва" } &&
             step.before.context.query == "Казань" &&
-            step.before.context.phase is RequestState.Loading &&
+            step.before.context is CitySearchState.Loading &&
             input.command !in step.before.commands
     }
 }

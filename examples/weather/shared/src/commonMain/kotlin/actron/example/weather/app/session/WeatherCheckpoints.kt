@@ -5,15 +5,18 @@ import actron.example.weather.core.mvi.NoCommand
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
 import actron.example.weather.feature.currentweather.presentation.LoadCurrentWeather
+import actron.example.weather.feature.currentweather.presentation.toRequestState
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastState
 import actron.example.weather.feature.hourlyforecast.presentation.LoadHourlyForecast
+import actron.example.weather.feature.hourlyforecast.presentation.toRequestState
 import actron.example.weather.feature.weather.presentation.CityWeatherMachine
 import actron.example.weather.feature.weather.presentation.WeatherContext
 import actron.example.weather.feature.weather.presentation.WeatherScreenState
 import actron.example.weather.feature.weatheradvice.presentation.LoadWeatherAdvice
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceMachine
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceState
+import actron.example.weather.feature.weatheradvice.presentation.toAdvicePhase
 import actron.statechart.machine.BridgeMessage
 import actron.statechart.machine.ExecutorCheckpoint
 import actron.statechart.machine.MachineTime
@@ -26,7 +29,7 @@ data class WeatherCheckpoints(
     val advice: ExecutorCheckpoint<WeatherAdviceState, LoadWeatherAdvice>,
     val inFlight: List<BridgeMessage> = emptyList(),
 ) {
-    fun context(): WeatherContext = WeatherContext(city = screen.snapshot.context.city, current = current.snapshot.context.phase, hourly = hourly.snapshot.context.phase, advice = advice.snapshot.context.phase)
+    fun context(): WeatherContext = WeatherContext(city = screen.snapshot.context.city, current = current.snapshot.context.toRequestState(), hourly = hourly.snapshot.context.toRequestState(), advice = advice.snapshot.context.toAdvicePhase())
 
     fun at(time: MachineTime): WeatherCheckpoints =
         copy(
@@ -48,7 +51,7 @@ data class WeatherCheckpoints(
 fun freshWeather(city: City): WeatherCheckpoints =
     WeatherCheckpoints(
         screen = ExecutorCheckpoint.initial(snapshot = CityWeatherMachine.create().initialSnapshot(context = WeatherScreenState(city = city))),
-        current = ExecutorCheckpoint.initial(snapshot = CurrentWeatherMachine.create().initialSnapshot(context = CurrentWeatherState(city = city))),
-        hourly = ExecutorCheckpoint.initial(snapshot = HourlyForecastMachine.create().initialSnapshot(context = HourlyForecastState(city = city))),
-        advice = ExecutorCheckpoint.initial(snapshot = WeatherAdviceMachine.create().initialSnapshot(context = WeatherAdviceState(city = city))),
+        current = ExecutorCheckpoint.initial(snapshot = CurrentWeatherMachine.create().initialSnapshot(context = CurrentWeatherState.Ready(city = city))),
+        hourly = ExecutorCheckpoint.initial(snapshot = HourlyForecastMachine.create().initialSnapshot(context = HourlyForecastState.Ready(city = city))),
+        advice = ExecutorCheckpoint.initial(snapshot = WeatherAdviceMachine.create().initialSnapshot(context = WeatherAdviceState.Ready(city = city))),
     )

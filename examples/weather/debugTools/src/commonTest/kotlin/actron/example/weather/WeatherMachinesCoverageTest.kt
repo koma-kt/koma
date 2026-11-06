@@ -36,14 +36,14 @@ class WeatherMachinesCoverageTest {
             for (phase in Phase.entries) {
                 for (query in listOf("", "New query")) {
                     reports +=
-                        CitySearchMachine.create().test(this, CitySearchState()) {
+                        CitySearchMachine.create().test(this, CitySearchState.Idle()) {
                             preparePhase(phase = phase)
                             dispatch(CitySearchAction.ChangeQuery(query))
                             assertEquals(query, context.query)
                             if (query.isEmpty()) {
-                                expectState<RequestState.Idle> { it.phase }
+                                expectState<CitySearchState.Idle>()
                             } else {
-                                expectState<RequestState.Debouncing> { it.phase }
+                                expectState<CitySearchState.Debouncing>()
                             }
                             // Close this scenario through a real action, leaving no timers or commands.
                             dispatch(CitySearchAction.ChangeQuery(""))
@@ -93,19 +93,19 @@ class WeatherMachinesCoverageTest {
     @Test
     fun searchRejectsStaleAnswersAndRestartsDebounceOnEveryEdit() =
         runTest {
-            CitySearchMachine.create().test(this, CitySearchState()) {
+            CitySearchMachine.create().test(this, CitySearchState.Idle()) {
                 dispatch(CitySearchAction.ChangeQuery("L"))
                 advanceTimeBy(349.milliseconds)
                 dispatch(CitySearchAction.ChangeQuery("Lo"))
                 advanceTimeBy(1.milliseconds)
-                expectState<RequestState.Debouncing> { it.phase }
+                expectState<CitySearchState.Debouncing>()
                 assertTrue(driver.runningCommands.isEmpty())
                 advanceTimeBy(349.milliseconds)
-                expectState<RequestState.Loading> { it.phase }
+                expectState<CitySearchState.Loading>()
                 val revision = context.revision
                 dispatch(CitySearchAction.Found(revision - 1, emptyList()))
                 dispatch(CitySearchAction.Failed(revision - 1, "old failure"))
-                expectState<RequestState.Loading> { it.phase }
+                expectState<CitySearchState.Loading>()
                 completeCommand { CitySearchAction.Found(it.revision, emptyList()) }
                 assertEquals("Lo", context.query)
             }
@@ -116,17 +116,17 @@ class WeatherMachinesCoverageTest {
         runTest(testBody = {
             val city = demoCities.first()
             val other = demoCities[1]
-            CurrentWeatherMachine.create().test(scope = this, initial = CurrentWeatherState(city = city), scenario = {
+            CurrentWeatherMachine.create().test(scope = this, initial = CurrentWeatherState.Ready(city = city), scenario = {
                 dispatch(action = CurrentWeatherAction.Refresh)
                 val old = driver.runningCommands.single().id
                 dispatch(action = CurrentWeatherAction.Loaded(reading = WeatherReading(city = other, temperature = 1.0, feelsLike = 1.0, wind = 1.0, code = 0, time = "12:00")))
-                expectState<RequestState.Loading>(select = { it.phase })
+                expectState<CurrentWeatherState.Loading>()
                 dispatch(action = CurrentWeatherAction.Refresh)
                 assertTrue(actual = old in driver.handler.cancelled)
                 assertEquals(expected = 1, actual = driver.runningCommands.size)
                 assertTrue(actual = driver.runningCommands.none { it.id == old })
                 advanceTimeBy(duration = 8.seconds)
-                expectState<RequestState.Error>(select = { it.phase })
+                expectState<CurrentWeatherState.Error>()
             })
         })
 }

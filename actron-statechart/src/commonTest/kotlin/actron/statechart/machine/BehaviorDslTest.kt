@@ -51,11 +51,11 @@ class BehaviorDslTest {
                                 withContext(context = NonCancellable) {
                                     cleanup.complete(value = Unit)
                                     release.await()
-                                    transitionTo(state = Phase.Loading(query = "obsolete"))
+                                    target(state = Phase.Loading(query = "obsolete"))
                                 }
                             }
                         }
-                        on<Search> { action -> transitionTo(state = Phase.Loading(query = action.query)) }
+                        on<Search> { action -> target(state = Phase.Loading(query = action.query)) }
                     }
                     state<Phase.Loading>()
                 }
@@ -80,8 +80,8 @@ class BehaviorDslTest {
             ) {
                 state<Phase.Idle> {
                     on<Search> {
-                        transitionTo(state = Phase.Loading(query = "first"))
-                        transitionTo(state = Phase.Loading(query = "second"))
+                        target(state = Phase.Loading(query = "first"))
+                        target(state = Phase.Loading(query = "second"))
                     }
                 }
                 state<Phase.Loading>()
@@ -103,7 +103,7 @@ class BehaviorDslTest {
             ) {
                 state<Phase.Idle> {
                     onEnter { calls += 1 }
-                    on<Search> { transitionTo(state = Phase.Idle) }
+                    on<Search> { target(state = Phase.Idle) }
                 }
                 state<Phase.Loading>()
             }
@@ -139,7 +139,7 @@ class BehaviorDslTest {
                                 cancellations += 1
                             }
                         }
-                        on<Search> { action -> transitionTo(state = Phase.Loading(query = action.query)) }
+                        on<Search> { action -> target(state = Phase.Loading(query = action.query)) }
                     }
                     state<Phase.Loading> { onEnter { starts += 1 } }
                 }
@@ -185,12 +185,12 @@ class BehaviorDslTest {
                             entered.complete(value = Unit)
                             try {
                                 delay(duration = 60.seconds)
-                                transitionTo(state = Phase.Loading(query = "obsolete"))
+                                target(state = Phase.Loading(query = "obsolete"))
                             } finally {
                                 cancelled.complete(value = Unit)
                             }
                         }
-                        on<Search> { action -> transitionTo(state = Phase.Loading(query = action.query)) }
+                        on<Search> { action -> target(state = Phase.Loading(query = action.query)) }
                     }
                     state<Phase.Loading>()
                 }
@@ -224,7 +224,7 @@ class BehaviorDslTest {
                         on<Search>(block = { action ->
                             calls += 1
                             if (action.query.isNotBlank()) {
-                                transitionTo(state = Phase.Loading(query = action.query))
+                                target(state = Phase.Loading(query = action.query))
                             }
                         })
                     })

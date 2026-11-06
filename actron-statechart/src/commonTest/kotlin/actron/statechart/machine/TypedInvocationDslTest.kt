@@ -9,16 +9,17 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 
 class TypedInvocationDslTest {
-    private sealed interface Phase {
-        data object Idle : Phase
+    private sealed interface Parent {
+        val seed: Int
 
-        data object Active : Phase
+        data class Idle(
+            override val seed: Int = 7,
+        ) : Parent
+
+        data class Active(
+            override val seed: Int,
+        ) : Parent
     }
-
-    private data class Parent(
-        val phase: Phase = Phase.Idle,
-        val seed: Int = 7,
-    )
 
     private sealed interface Act : Action {
         data object Open : Act
@@ -33,18 +34,16 @@ class TypedInvocationDslTest {
     }
 
     private fun composition() =
-        typedInvokedMachine<Parent, Phase, Act, String, Ev, Int, PhaseAction, String, ChildEvent>(
+        typedInvokedMachine<Parent, Act, String, Ev, Int, PhaseAction, String, ChildEvent>(
             DefinitionId("parent"),
             DefinitionVersion("1"),
-            Phase.Idle,
-            readState = { it.phase },
-            writeState = { c, phase -> c.copy(phase = phase) },
+            Parent.Idle(),
             child = childMachine(),
         ) { child ->
-            state(Phase.Idle) { on<Act.Open, Phase.Active>() }
-            state(Phase.Active) {
-                on<Act.Open, Phase.Active>()
-                on<Act.Close, Phase.Idle>()
+            state<Parent.Idle>(enter = { Parent.Idle(it.seed) }) { on<Act.Open, Parent.Active>() }
+            state<Parent.Active>(enter = { Parent.Active(it.seed) }) {
+                on<Act.Open, Parent.Active>()
+                on<Act.Close, Parent.Idle>()
                 invoke(child, context = { it.context.seed }, toParent = { event, send ->
                     when (event) {
                         ChildEvent.Finished -> send(Act.Close)
@@ -78,7 +77,7 @@ class TypedInvocationDslTest {
     @Test
     fun typedInvokeRoutesCompletionAndRejectsOldOwnerInputs() {
         val machine = composition()
-        val start = machine.decide(machine.initialSnapshot(Parent()), InvocationInput.Parent(MachineInput.Start(MachineTime.Zero))).snapshot
+        val start = machine.decide(machine.initialSnapshot(Parent.Idle()), InvocationInput.Parent(MachineInput.Start(MachineTime.Zero))).snapshot
         val opened = machine.decide(start, InvocationInput.Parent(MachineInput.Dispatch(Act.Open, MachineTime.Zero)))
         val owner = assertIs<ChildInvocation.Active<Int>>(opened.snapshot.child).owner
         assertEquals(
@@ -94,21 +93,19 @@ class TypedInvocationDslTest {
         val stale = machine.decide(reopened.snapshot, InvocationInput.Child(owner, MachineInput.Dispatch(PhaseAction.Finish, MachineTime.Zero)))
         assertEquals(reopened.snapshot, stale.snapshot)
         val finished = machine.decide(reopened.snapshot, InvocationInput.Child(nextOwner, MachineInput.Dispatch(PhaseAction.Finish, MachineTime.Zero)))
-        assertEquals(Phase.Idle, finished.snapshot.parent.context.phase)
+        assertIs<Parent.Idle>(finished.snapshot.parent.context)
         assertEquals(ChildInvocation.Dormant, finished.snapshot.child)
     }
 
     @Test
     fun missingInvokeDeclarationIsRejected() {
         assertFailsWith<IllegalArgumentException> {
-            typedInvokedMachine<Parent, Phase, Act, String, Ev, Int, PhaseAction, String, ChildEvent>(
+            typedInvokedMachine<Parent, Act, String, Ev, Int, PhaseAction, String, ChildEvent>(
                 DefinitionId("invalid"),
                 DefinitionVersion("1"),
-                Phase.Idle,
-                readState = { it.phase },
-                writeState = { c, phase -> c.copy(phase = phase) },
+                Parent.Idle(),
                 child = childMachine(),
-            ) { state(Phase.Idle) }
+            ) { state<Parent.Idle>(enter = { Parent.Idle(it.seed) }) }
         }
     }
 }

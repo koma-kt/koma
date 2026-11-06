@@ -43,20 +43,18 @@ Start with [CitySearchMachine.kt](../shared/src/commonMain/kotlin/actron/example
 
 | Declaration | Meaning in Weather |
 | --- | --- |
-| `CitySearchState` | Complete immutable state: query, revision and the current phase |
+| `CitySearchState` | Sealed screen state. Each variant carries the query and revision |
 | `CitySearchAction` | User edits and typed operation results |
 | `SearchCitiesCommand` | Data describing a search to run; contains no HTTP implementation |
 | `typedStateMachine` | Builds the search graph and its executable rules together |
-| `readState` / `writeState` | Bind the graph phase to `CitySearchState.phase` |
 | `state<T>` | Declares a graph node and its transitions |
-| `on<Action> { guard; target; update }` | Declares one action edge; destination comes from target's return type |
+| `on<Action> { guard; target }` | Declares one action edge; destination comes from target's return type |
 | `always(transition = { ... })` | Chooses the next phase without another input |
 | `after(delay = ..., transition = { ... })` | Declares an activation-owned debounce or timeout |
 | `onEnter { command(...) }` | Registers work to execute after the decision commits |
 
-`phase` holds the state value. There is no second handwritten `StateId` field to synchronize.
-The DSL derives graph nodes from state declarations. `RequestState.Success` carries results,
-`Error` carries an error message; loading and error booleans are not independently stored.
+The screen renders the current `CitySearchState` directly. Its variant selects the graph node.
+`Success` carries the results and `Error` carries the cause. Saved sessions and recordings serialize the sealed state directly.
 `MachineSnapshot` adds runtime configuration, revision and command/timer identities around the
 context. The context's search `revision` identifies the query generation; it is distinct from
 that runtime snapshot revision.
@@ -76,7 +74,7 @@ Any search state → ChangeQuery(" ") → QueryChanged → always → Idle
 
 `QueryChanged` tries the blank-query guard first, then an unconditional Debouncing fallback. The edit updates query/revision once.
 The choice settles in the same decision: the history records both edges, and the UI receives
-Idle or Debouncing. `queryChanges()` declares the common edit rule in each stable state.
+Idle or Debouncing. Each stable state declares its own `ChangeQuery → QueryChanged` edge.
 
 The second edit updates the query/revision and exits the old `Loading` activation. Its command
 and timeout are cancelled immediately, before the next debounce expires. Further edits restart
@@ -170,7 +168,7 @@ The host supplies field projections and a `WeatherHistoryFrame`; Actron does not
 Selecting a history entry renders its saved data without running commands. Continuing from a
 resumable live entry calls the root's `continueFrom`: it replaces the Decompose children and
 recreates executors from their checkpoints. Pending read requests restart; completed reads stay
-completed. Search v13 preserves the remaining debounce and request-timeout duration.
+completed. Search v14 preserves the remaining debounce and request-timeout duration.
 The other weather machines still restart their unfinished entry bodies and timeout on resume. This does not restore a suspended call stack or
 guarantee exactly-once external side effects. Later history is removed after successful continuation.
 
@@ -253,7 +251,7 @@ independent consumers or dependencies, rather than to reproduce the production m
 val store = componentContext.retainedMachine(
     key = "city-search",
     machine = CitySearchMachine.create(),
-    initial = CitySearchState(),
+    initial = CitySearchState.Idle(),
     handler = citySearchHandler(repository),
 )
 ```
@@ -286,19 +284,19 @@ on core/statechart and Decompose, and has no time-travel, persistence-codec or C
 
 ## Declared search transitions and behavior handlers
 
-Search v13 uses `typedStateMachine` with `guard / target / update` declarations. Its eleven
+Search v14 uses `typedStateMachine` with `guard / target` declarations. Its eleven
 edges include actions, two automatic choices and two timers. The graph is available before
 execution; rejected and accepted guards are recorded by the same engine that chooses transitions.
 `target` infers the destination type from its factory, so Success is not written twice.
-Target and update read the same context before the update; only target owns the phase.
+Each target carries the current query and revision into the next state. Only a query edit advances the revision.
 
 This changes search continuation from v12: debounce and timeout retain their remaining delay,
 and QueryChanged settles within the edit decision instead of publishing a separate entry result.
-Definition version 13 deliberately rejects v12 checkpoints/recordings; no format version changes.
+Definition version 14 serializes the full sealed state and rejects earlier city-search checkpoints.
 HTTP remains restartable read work, not a saved coroutine stack. `CitySearchGraphTest` verifies
 restoration, graph edges and both outcomes of response guards.
 
 Other Weather features retain `behaviorStateMachine`, suspend `onEnter` and complete-snapshot
-`transitionTo`. Those handlers support ordinary Kotlin control flow and use a conservative graph
+`target`. Those handlers support ordinary Kotlin control flow and use a conservative graph
 envelope. Their unfinished entry work restarts from the beginning on continuation. Both APIs use
 the same StateChart engine, immutable snapshots, command handling and queued Store.

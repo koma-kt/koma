@@ -7,28 +7,25 @@ import actron.statechart.StateId
 import actron.statechart.Trigger
 import kotlin.reflect.KClass
 
-/** Immutable context at rule evaluation; target and update share the pre-update context. */
+/** Immutable context at rule evaluation. */
 @ActronStoreDsl
 class TransitionRuleScope<C : Any> internal constructor(
     val state: C,
 )
 
 /**
- * A declaration, not an action callback. Exactly one [target] is required. Optional [guard] and
- * [update] cannot change the selected phase. Guards run before exit hooks; target and update
- * share the context after exit hooks, before this transition updates it (normal chart ordering).
- * All callbacks must be pure. The resulting phase and context are committed in one decision.
+ * A declaration, not an action callback. Exactly one [target] is required. A guard runs before exit hooks.
+ * The target reads the context after exit hooks and supplies the complete destination value.
  */
 @ActronStoreDsl
 class TransitionRuleBuilder<C : Any, S : Any, T : Any>
     @PublishedApi
     internal constructor(
         private val reference: (KClass<out S>) -> StateId,
-        private val applyTarget: (C, C, S) -> C,
+        private val applyTarget: (C, S) -> C,
     ) {
         private val declarations = mutableSetOf<String>()
         private var condition: TransitionRuleScope<C>.(T) -> Boolean = { true }
-        private var updateContext: TransitionRuleScope<C>.(T) -> C = { state }
 
         // A missing required declaration is a definition error, never a runtime fallback target.
         private var complete: () -> RuleDestination<C, S, T> = { throw IllegalArgumentException("Exactly one target is required") }
@@ -40,11 +37,6 @@ class TransitionRuleBuilder<C : Any, S : Any, T : Any>
 
         inline fun <reified Target : S> target(noinline factory: TransitionRuleScope<C>.(T) -> Target) {
             destination(type = Target::class, factory = factory)
-        }
-
-        fun update(transform: TransitionRuleScope<C>.(T) -> C) {
-            require(declarations.add("update")) { "update is declared twice" }
-            updateContext = transform
         }
 
         @PublishedApi
@@ -65,7 +57,6 @@ class TransitionRuleBuilder<C : Any, S : Any, T : Any>
         ) {
             val destination = complete()
             val guard = condition
-            val update = updateContext
             val write = applyTarget
             delegate.addDeclared(
                 target = destination.id,
@@ -79,7 +70,7 @@ class TransitionRuleBuilder<C : Any, S : Any, T : Any>
                             val event = action(input)
                             val target = destination.factory(scope, event)
                             require(target::class == destination.type) { "target must return its declared concrete type" }
-                            write(context, update(scope, event), target)
+                            write(context, target)
                         },
                     ),
             )

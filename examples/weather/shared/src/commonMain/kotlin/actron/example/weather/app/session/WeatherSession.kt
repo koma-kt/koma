@@ -28,7 +28,7 @@ sealed interface WeatherRoute {
 }
 
 data class WeatherFrame(
-    val search: ExecutorCheckpoint<CitySearchState, SearchCitiesCommand> = ExecutorCheckpoint.initial(CitySearchMachine.create().initialSnapshot(CitySearchState())),
+    val search: ExecutorCheckpoint<CitySearchState, SearchCitiesCommand> = ExecutorCheckpoint.initial(CitySearchMachine.create().initialSnapshot(CitySearchState.Idle())),
     val route: WeatherRoute = WeatherRoute.Search,
 ) {
     fun at(time: MachineTime): WeatherFrame =

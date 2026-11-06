@@ -23,18 +23,18 @@ class RequestFailureLifecycleTest {
         runTest(testBody = {
             CitySearchMachine.create().test(
                 scope = this,
-                initial = CitySearchState(),
+                initial = CitySearchState.Idle(),
                 scenario = {
                     dispatch(action = CitySearchAction.ChangeQuery(query = "London"))
                     advanceTimeBy(duration = 350.milliseconds)
                     advanceTimeBy(duration = 8.seconds)
-                    assertEquals(expected = RequestFailure.Timeout, actual = expectState<RequestState.Error>(select = { it.phase }).cause)
+                    assertEquals(expected = RequestFailure.Timeout, actual = expectState<CitySearchState.Error>().cause)
                     dispatch(action = CitySearchAction.ChangeQuery(query = "London"))
-                    expectState<RequestState.Debouncing>(select = { it.phase })
+                    expectState<CitySearchState.Debouncing>()
                     advanceTimeBy(duration = 350.milliseconds)
-                    expectState<RequestState.Loading>(select = { it.phase })
+                    expectState<CitySearchState.Loading>()
                     completeCommand(result = { CitySearchAction.Failed(revision = it.revision, message = "offline") })
-                    assertEquals(expected = RequestFailure.Unavailable(message = "offline"), actual = expectState<RequestState.Error>(select = { it.phase }).cause)
+                    assertEquals(expected = RequestFailure.Unavailable(message = "offline"), actual = expectState<CitySearchState.Error>().cause)
                 },
             )
         })
@@ -42,15 +42,15 @@ class RequestFailureLifecycleTest {
     @Test
     fun forecastTimeoutAndRequestFailureUseTheSameRetryableErrorState() =
         runTest(testBody = {
-            HourlyForecastMachine.create().test(scope = this, initial = HourlyForecastState(city = demoCities.first()), scenario = {
+            HourlyForecastMachine.create().test(scope = this, initial = HourlyForecastState.Ready(city = demoCities.first()), scenario = {
                 dispatch(action = HourlyForecastAction.Refresh)
                 advanceTimeBy(duration = 8.seconds)
-                assertEquals(expected = RequestFailure.Timeout, actual = expectState<RequestState.Error>(select = { it.phase }).cause)
+                assertEquals(expected = RequestFailure.Timeout, actual = expectState<HourlyForecastState.Error>().cause)
                 dispatch(action = HourlyForecastAction.Retry)
                 completeCommand(result = { HourlyForecastAction.Failed(message = "offline") })
-                assertEquals(expected = RequestFailure.Unavailable(message = "offline"), actual = expectState<RequestState.Error>(select = { it.phase }).cause)
+                assertEquals(expected = RequestFailure.Unavailable(message = "offline"), actual = expectState<HourlyForecastState.Error>().cause)
                 dispatch(action = HourlyForecastAction.Refresh)
-                expectState<RequestState.Loading>(select = { it.phase })
+                expectState<HourlyForecastState.Loading>()
                 advanceTimeBy(duration = 8.seconds)
             })
         })

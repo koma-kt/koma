@@ -22,7 +22,7 @@ import kotlin.test.*
 internal fun recordingHistory(): WeatherHistory {
     val history = WeatherHistory()
     val search = CitySearchMachine.create()
-    val searchState = search.initialSnapshot(CitySearchState("Москва", RequestState.Loading))
+    val searchState = search.initialSnapshot(CitySearchState.Loading("Москва", 0))
     val searching = WeatherFrame(search = ExecutorCheckpoint.initial(searchState))
     val details = HistoryDetails("ChangeQuery(Москва)", "Action", "Handled", emptyList(), listOf(StateField("query", "Москва")))
     history.timeline.append(history.timeline.machine("City Search", "city-search"), 0, details, WeatherHistoryFrame(searching))
@@ -35,8 +35,8 @@ internal fun recordingHistory(): WeatherHistory {
                         snapshot =
                             cut.current.snapshot.copy(
                                 context =
-                                    cut.current.snapshot.context
-                                        .copy(phase = RequestState.Loading),
+                                    actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
+                                        .Loading(city),
                             ),
                     ),
             )

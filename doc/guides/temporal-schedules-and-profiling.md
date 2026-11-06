@@ -29,7 +29,7 @@ val rules = TemporalRules<
         triggered = { it.explained.decision.commands.isNotEmpty() },
         satisfied = { started, later ->
             later.after.context.revision != started.after.context.revision ||
-                later.after.context.phase !is RequestState.Loading
+                later.after.context !is CitySearchState.Loading
         },
     )
 }

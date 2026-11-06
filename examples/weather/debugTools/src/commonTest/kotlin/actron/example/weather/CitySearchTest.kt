@@ -73,7 +73,7 @@ class CitySearchTest {
                 testScheduler.advanceTimeBy(350)
                 testScheduler.runCurrent()
                 assertEquals(listOf("Москва"), calls)
-                assertEquals(RequestState.Loading, store.currentState.context.phase)
+                assertEquals(CitySearchState.Loading("Москва", 1), store.currentState.context)
                 val oldRevision = store.currentState.context.revision
 
                 store.dispatch(CitySearchAction.ChangeQuery("Казань"))
@@ -81,25 +81,25 @@ class CitySearchTest {
                 // Cancellation reaches the HTTP engine immediately, before Kazan's debounce.
                 assertEquals(listOf("Москва"), cancelled)
                 assertTrue(store.currentState.commands.isEmpty())
-                assertEquals(RequestState.Debouncing, store.currentState.context.phase)
+                assertEquals(CitySearchState.Debouncing("Казань", 2), store.currentState.context)
                 testScheduler.advanceTimeBy(349)
                 testScheduler.runCurrent()
                 assertEquals(listOf("Москва"), calls)
                 testScheduler.advanceTimeBy(1)
                 testScheduler.runCurrent()
                 assertEquals(listOf("Москва", "Казань"), calls)
-                assertEquals(RequestState.Loading, store.currentState.context.phase)
+                assertEquals(CitySearchState.Loading("Казань", 2), store.currentState.context)
 
                 // Separately simulate a callback already queued outside the cancelled request.
                 store.dispatch(CitySearchAction.Found(oldRevision, listOf(CityOption(City("Москва", 55.75, 37.62)))))
                 testScheduler.runCurrent()
                 assertEquals("Казань", store.currentState.context.query)
-                assertEquals(RequestState.Loading, store.currentState.context.phase)
+                assertEquals(CitySearchState.Loading("Казань", 2), store.currentState.context)
                 kazanResponse.complete(Unit)
                 testScheduler.runCurrent()
                 assertEquals(
-                    RequestState.Success(listOf(CityOption(City("Казань", 55.79, 49.12)))),
-                    store.currentState.context.phase,
+                    CitySearchState.Success("Казань", 2, listOf(CityOption(City("Казань", 55.79, 49.12)))),
+                    store.currentState.context,
                 )
             } finally {
                 store.close()
@@ -108,19 +108,19 @@ class CitySearchTest {
         }
 
     @Test
-    fun phasesRoundTripWithoutIndependentFlags() {
-        val phases =
+    fun statesRoundTripWithoutIndependentFlags() {
+        val states =
             listOf(
-                RequestState.Idle,
-                RequestState.Debouncing,
-                RequestState.Loading,
-                RequestState.Success(listOf(CityOption(demoCities.first()))),
-                RequestState.Success(emptyList<CityOption>()),
-                RequestState.Error(cause = RequestFailure.Unavailable(message = "offline")),
-                RequestState.Error(cause = RequestFailure.Timeout),
+                CitySearchState.Idle(" ", 1),
+                CitySearchState.QueryChanged("P", 1),
+                CitySearchState.Debouncing("P", 1),
+                CitySearchState.Loading("P", 1),
+                CitySearchState.Success("P", 1, listOf(CityOption(demoCities.first()))),
+                CitySearchState.Success("P", 1, emptyList<CityOption>()),
+                CitySearchState.Error("P", 1, cause = RequestFailure.Unavailable(message = "offline")),
+                CitySearchState.Error("P", 1, cause = RequestFailure.Timeout),
             )
-        for (phase in phases) {
-            val state = CitySearchState(query = "P", phase = phase, revision = 1)
+        for (state in states) {
             val encoded =
                 kotlinx.serialization.json.Json
                     .encodeToString(CitySearchState.serializer(), state)
@@ -190,7 +190,7 @@ class CitySearchTest {
                 store.dispatch(CitySearchAction.ChangeQuery("P"))
                 testScheduler.runCurrent()
                 val first = store.state.value
-                assertEquals(RequestState.Debouncing, first.context.phase)
+                assertEquals(CitySearchState.Debouncing("P", 1), first.context)
                 testScheduler.advanceTimeBy(200)
                 store.dispatch(CitySearchAction.ChangeQuery("Pa"))
                 testScheduler.runCurrent()
@@ -201,15 +201,15 @@ class CitySearchTest {
                 assertEquals(0, calls)
                 testScheduler.advanceTimeBy(1)
                 testScheduler.runCurrent()
-                assertEquals(RequestState.Loading, store.state.value.context.phase)
+                assertEquals(CitySearchState.Loading("Pa", 2), store.state.value.context)
                 assertEquals(1, calls)
                 store.dispatch(CitySearchAction.ChangeQuery(""))
                 testScheduler.runCurrent()
-                assertEquals(RequestState.Idle, store.state.value.context.phase)
+                assertEquals(CitySearchState.Idle("", 3), store.state.value.context)
                 assertTrue(cancelled)
                 store.dispatch(CitySearchAction.Found(2, listOf(CityOption(demoCities.first()))))
                 testScheduler.runCurrent()
-                assertEquals(RequestState.Idle, store.state.value.context.phase)
+                assertEquals(CitySearchState.Idle("", 3), store.state.value.context)
             } finally {
                 store.close()
             }
@@ -230,11 +230,11 @@ class CitySearchTest {
             try {
                 store.start()
                 store.dispatch(CitySearchAction.ChangeQuery("P"))
-                store.state.first { it.context.phase is RequestState.Error }
+                store.state.first { it.context is CitySearchState.Error }
                 store.dispatch(CitySearchAction.ChangeQuery("P"))
-                store.state.first { it.context.phase is RequestState.Success }
+                store.state.first { it.context is CitySearchState.Success }
                 assertEquals(2, calls)
-                assertEquals(RequestState.Success(emptyList<CityOption>()), store.state.value.context.phase)
+                assertEquals(CitySearchState.Success("P", 2, emptyList<CityOption>()), store.state.value.context)
             } finally {
                 store.close()
             }
@@ -257,12 +257,12 @@ class CitySearchTest {
             try {
                 store.start()
                 store.dispatch(CitySearchAction.ChangeQuery("P"))
-                store.state.first { it.context.phase == RequestState.Error(cause = RequestFailure.Timeout) }
+                store.state.first { it.context == CitySearchState.Error("P", 1, cause = RequestFailure.Timeout) }
                 testScheduler.runCurrent()
                 assertTrue(cancelled)
                 store.dispatch(CitySearchAction.Found(1, listOf(CityOption(demoCities.first()))))
                 testScheduler.runCurrent()
-                assertEquals(RequestState.Error(cause = RequestFailure.Timeout), store.state.value.context.phase)
+                assertEquals(CitySearchState.Error("P", 1, cause = RequestFailure.Timeout), store.state.value.context)
             } finally {
                 store.close()
             }
@@ -272,7 +272,7 @@ class CitySearchTest {
 private fun TestScope.searchStore(repository: CitySearchRepository) =
     MachineStore(
         CitySearchMachine.create(),
-        CitySearchState(),
+        CitySearchState.Idle(),
         citySearchHandler(repository),
         backgroundScope,
         clock = MachineClock.monotonic(testScheduler.timeSource),

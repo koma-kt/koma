@@ -19,31 +19,14 @@ import actron.statechart.Trigger
 import kotlin.reflect.KClass
 import kotlin.time.Duration
 
-/**
- * A machine whose complete context is its typed state value. Use this overload when there is
- * no separate shared context: the DSL supplies the identity read/write binding automatically.
- */
+/** Each root state value is the complete application state and identifies its graph node. */
 fun <S : Any, A : Action, CMD : Any, E : Event> typedStateMachine(
     id: DefinitionId,
     version: DefinitionVersion,
     initial: S,
     build: TypedStateMachineBuilder<S, S, A, CMD, E>.() -> Unit,
-): Machine<S, A, CMD, E> = typedStateMachine(id, version, initial, { it }, { _, state -> state }, build)
-
-/** The selected state value is the source of graph identity and UI/recording data.
- * State class names form persisted graph IDs; renaming a class requires a definition version bump.
- * [readState] and [writeState] must be pure and describe the same property.
- * [initial] selects the starting variant; initialSnapshot/MachineStore context supplies its data.
- */
-fun <C : Any, S : Any, A : Action, CMD : Any, E : Event> typedStateMachine(
-    id: DefinitionId,
-    version: DefinitionVersion,
-    initial: S,
-    readState: (C) -> S,
-    writeState: (C, S) -> C,
-    build: TypedStateMachineBuilder<C, S, A, CMD, E>.() -> Unit,
-): Machine<C, A, CMD, E> =
-    TypedStateMachineBuilder<C, S, A, CMD, E>(readState, writeState)
+): Machine<S, A, CMD, E> =
+    TypedStateMachineBuilder<S, S, A, CMD, E>({ it }, { _, state -> state })
         .apply(build)
         .build(id, version, initial)
 
@@ -225,17 +208,10 @@ open class TypedStateMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E :
             return Machine(id, version, StateChartDefinition(initialId, nodes.toList(), transitions.toList()), implementation)
         }
 
-        @PublishedApi
-        internal fun applyTarget(
-            original: C,
-            updated: C,
-            target: S,
-        ): C {
-            require(readState(original) == readState(updated)) { "update must preserve the phase; use target to change it" }
-            return writeState(updated, target)
-        }
-
-        internal fun finish(initial: S): StateId {
+        internal fun finish(
+            initial: S,
+            validateBeforeStart: Boolean = true,
+        ): StateId {
             val initialId = reference(initial::class)
             require(references.all { (id, type) -> states[id] == type }) { "Every referenced state type must be declared" }
             require(registry.historyTargets.all { it in registry.histories }) { "Every history target needs history() in its compound" }
@@ -248,14 +224,19 @@ open class TypedStateMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E :
             }
             val declared = states.filterKeys { it !in registry.compounds }
             implementation.invariant("${prefix}typed-state-matches-graph") { snapshot ->
-                val type = readState(snapshot.context)::class
-                if (snapshot.isStarted && parent is StateId && !snapshot.isActive(parent)) {
-                    true // A nested region retains its data while its owning parallel state is inactive.
-                } else if (!snapshot.isStarted) {
-                    type == initial::class
-                } else {
-                    val active = snapshot.configuration.active.filter { it in declared }
-                    active.size == 1 && declared[active.single()] == type
+                when {
+                    !snapshot.isStarted -> {
+                        !validateBeforeStart || readState(snapshot.context)::class == initial::class
+                    }
+
+                    parent is StateId && !snapshot.isActive(parent) -> {
+                        true
+                    }
+
+                    else -> {
+                        val active = snapshot.configuration.active.filter { it in declared }
+                        active.size == 1 && declared[active.single()] == readState(snapshot.context)::class
+                    }
                 }
             }
             implementation.enforceInvariants()
@@ -294,17 +275,16 @@ class TypedCompoundMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E : E
 
         inline fun <reified Target : S> onDone(
             noinline guard: (C) -> Boolean = { true },
-            noinline reduce: (C) -> C = { it },
-        ) = handlers.onDone<Target>(guard, reduce)
+        ) = handlers.onDone<Target>(guard)
 
         /** Parent handlers participate in the normal inner-before-outer transition priority. */
         fun transitions(build: TypedMachineStateBuilder<C, S, A, CMD, E>.() -> Unit) {
             handlers.apply(build)
         }
 
-        fun onEnter(block: MachineEnterScope<C, A, CMD, E>.() -> Unit) = handlers.onEnter(block)
+        fun onEnter(block: StateEnterScope<C, A, CMD, E>.() -> Unit) = handlers.onEnter(block)
 
-        fun onExit(block: MachineExitScope<C, A, E>.() -> Unit) = handlers.onExit(block)
+        fun onExit(block: StateHookScope<C, A, E>.() -> Unit) = handlers.onExit(block)
 
         /** One history per compound; absent history falls back to the compound's initial child. */
         fun history(deep: Boolean = false) {
@@ -351,7 +331,7 @@ class TypedMachineStateBuilder<C : Any, S : Any, A : Action, CMD : Any, E : Even
         }
 
         @PublishedApi
-        internal fun <T : Any> declaration(): TransitionRuleBuilder<C, S, T> = TransitionRuleBuilder(reference = owner::valueReference, applyTarget = owner::applyTarget)
+        internal fun <T : Any> declaration(): TransitionRuleBuilder<C, S, T> = TransitionRuleBuilder(reference = owner::valueReference, applyTarget = writeState)
 
         /** Bind a typed child to this state's activation, with typed event routes. */
         fun <CC : Any, CA : Action, CCMD : Any, CE : Event> invoke(
@@ -364,63 +344,56 @@ class TypedMachineStateBuilder<C : Any, S : Any, A : Action, CMD : Any, E : Even
         /** Enter a target whose value is supplied by its state entry factory. */
         inline fun <reified T : A, reified Target : S> on() = transition<T, Target>()
 
-        /** Guarded/reducing transition to an entry-factory state or compound. */
+        /** Guarded transition to an entry-factory state or compound. */
         inline fun <reified T : A, reified Target : S> transition(
             noinline guard: (C, T) -> Boolean = { _, _ -> true },
-            noinline reduce: (C, T) -> C = { context, _ -> context },
         ) {
-            delegate.on<T>(owner.implicitReference(Target::class), guard, reduce)
+            delegate.on<T>(owner.implicitReference(Target::class), guard)
         }
 
         inline fun <reified T : A, reified Parent : S> onHistory(
             noinline guard: (C, T) -> Boolean = { _, _ -> true },
-            noinline reduce: (C, T) -> C = { context, _ -> context },
         ) {
-            delegate.on<T>(owner.historyReference(Parent::class), guard, reduce)
+            delegate.on<T>(owner.historyReference(Parent::class), guard)
         }
 
-        inline fun <reified Target : S> always(
+        inline fun <reified Target : S> alwaysEnter(
             noinline guard: (C) -> Boolean = { true },
-            noinline reduce: (C) -> C = { it },
         ) {
             delegate.add(
                 owner.implicitReference(Target::class),
                 Trigger.Eventless,
                 TransitionKind.External,
                 { context, _ -> guard(context) },
-                { context, _ -> reduce(context) },
+                { context, _ -> context },
             )
         }
 
         inline fun <reified Target : S> onDone(
             noinline guard: (C) -> Boolean = { true },
-            noinline reduce: (C) -> C = { it },
         ) {
             delegate.add(
                 owner.implicitReference(Target::class),
                 Trigger.Completion,
                 TransitionKind.External,
                 { context, _ -> guard(context) },
-                { context, _ -> reduce(context) },
+                { context, _ -> context },
             )
         }
 
         inline fun <reified Target : S> afterEnter(
             delay: Duration,
-            noinline reduce: (C) -> C = { it },
         ) {
-            delegate.after(delay, owner.implicitReference(Target::class), reduce)
+            delegate.after(delay, owner.implicitReference(Target::class))
         }
 
-        /** [reduce] updates shared data; [to] builds the target state from that updated data. */
+        /** [to] supplies the complete destination value. */
         inline fun <reified T : A, reified Target : S> on(
             noinline guard: (C, T) -> Boolean = { _, _ -> true },
-            noinline reduce: (C, T) -> C = { context, _ -> context },
             noinline to: (C, T) -> Target,
         ) {
             delegate.on<T>(owner.valueReference(Target::class), guard) { context, action ->
-                val updated = reduce(context, action)
-                writeState(updated, to(updated, action))
+                writeState(context, to(context, action))
             }
         }
 
@@ -429,7 +402,7 @@ class TypedMachineStateBuilder<C : Any, S : Any, A : Action, CMD : Any, E : Even
             noinline reduce: (C, T) -> C,
         ) = delegate.internal<T>(guard, reduce)
 
-        fun onEnter(block: MachineEnterScope<C, A, CMD, E>.() -> Unit) = delegate.onEnter(block)
+        fun onEnter(block: StateEnterScope<C, A, CMD, E>.() -> Unit) = delegate.onEnter(block)
 
-        fun onExit(block: MachineExitScope<C, A, E>.() -> Unit) = delegate.onExit(block)
+        fun onExit(block: StateHookScope<C, A, E>.() -> Unit) = delegate.onExit(block)
     }

@@ -127,7 +127,7 @@ A normal machine needs one call to `actron-decompose`:
 val store = componentContext.retainedMachine(
     key = "city-search",
     machine = CitySearchMachine.create(),
-    initial = CitySearchState(),
+    initial = CitySearchState.Idle(),
     handler = citySearchHandler(repository),
 )
 ```
@@ -141,7 +141,7 @@ The helper is part of `actron-decompose`; these changes have not yet been releas
 
 ## State machines
 
-`CitySearchMachine` uses `RequestState<List<CityOption>>`:
+`CitySearchMachine` uses the sealed `CitySearchState` directly as the screen state:
 `Idle → QueryChanged → Debouncing → Loading → Success / Error`.
 Every edit enters `QueryChanged` and updates the query and revision once. Its ordered `always`
 transitions select `Idle` for blank input, falling back to `Debouncing` otherwise, within the same decision.
@@ -220,7 +220,7 @@ Selecting an event immediately renders the saved application frame with inputs d
 repositories. Live recording continues in the background. Switching to **Live** exits preview.
 **Continue here** replaces the Decompose stack and executors with the selected frame and exits preview. Search context and both independent weather machines are restored
 together. Completed requests stay completed; running read requests restart, queued commands
-keep their lanes. Restoring search v13 preserves the remaining debounce and timeout duration; the timer
+keep their lanes. Restoring search v14 preserves the remaining debounce and timeout duration; the timer
 deadline is stored in the machine snapshot. Old executors are closed; callbacks
 from an earlier branch cannot modify the new frame. After successful restoration, entries after the selected event are removed. Earlier entries
 and the selected event stay available; new execution extends this linear history. The original

@@ -19,22 +19,32 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 class GeneratedScenariosTest {
-    sealed interface Phase {
-        data object Idle : Phase
+    sealed interface Context {
+        val query: String
+        val revision: Int
+        val result: String get() = ""
 
-        data object Waiting : Phase
+        data class Idle(
+            override val query: String = "",
+            override val revision: Int = 0,
+        ) : Context
 
-        data object Loading : Phase
+        data class Waiting(
+            override val query: String,
+            override val revision: Int,
+        ) : Context
 
-        data object Ready : Phase
+        data class Loading(
+            override val query: String,
+            override val revision: Int,
+        ) : Context
+
+        data class Ready(
+            override val query: String,
+            override val revision: Int,
+            override val result: String,
+        ) : Context
     }
-
-    data class Context(
-        val query: String = "",
-        val revision: Int = 0,
-        val result: String = "",
-        val phase: Phase = Phase.Idle,
-    )
 
     sealed interface Act : Action {
         data class Edit(
@@ -60,34 +70,29 @@ class GeneratedScenariosTest {
         typedStateMachine(
             DefinitionId("generated"),
             DefinitionVersion("1"),
-            Phase.Idle,
-            readState = { context: Context -> context.phase },
-            writeState = { context, phase: Phase -> context.copy(phase = phase) },
+            Context.Idle(),
         ) {
-            fun TypedMachineStateBuilder<Context, Phase, Act, Fetch, Ev>.edits() {
-                on<Act.Edit, Phase.Waiting>(
-                    reduce = { context, action -> context.copy(query = action.query, result = "", revision = context.revision + 1) },
-                ) { _, _ -> Phase.Waiting }
+            fun TypedMachineStateBuilder<Context, Context, Act, Fetch, Ev>.edits() {
+                on<Act.Edit> { target { action -> Context.Waiting(action.query, state.revision + 1) } }
             }
-            state<Phase.Idle> { edits() }
-            state<Phase.Waiting> {
+            state<Context.Idle> { edits() }
+            state<Context.Waiting> {
                 edits()
-                after(delay = 5.milliseconds) { target { Phase.Loading } }
+                after(delay = 5.milliseconds) { target { Context.Loading(state.query, state.revision) } }
             }
-            state<Phase.Loading> {
+            state<Context.Loading> {
                 edits()
-                onEnter { command(Fetch(context.query, context.revision)) }
-                on<Act.Answer, Phase.Ready>(
+                onEnter { command(Fetch(state.query, state.revision)) }
+                on<Act.Answer, Context.Ready>(
                     guard = { context, action -> brokenGuard || action.revision == context.revision },
-                    reduce = { context, action -> context.copy(result = action.value) },
-                ) { _, _ -> Phase.Ready }
-                after(delay = 20.milliseconds) { target { Phase.Idle } }
+                ) { context, action -> Context.Ready(context.query, context.revision, action.value) }
+                after(delay = 20.milliseconds) { target { Context.Idle(state.query, state.revision) } }
             }
-            state<Phase.Ready> { edits() }
+            state<Context.Ready> { edits() }
         }
 
     private fun model(broken: Boolean = false) =
-        machine(broken).scenarios(Context()) {
+        machine(broken).scenarios(Context.Idle()) {
             actions { state -> if (state.context.revision < 2) listOf(Act.Edit("A"), Act.Edit("B"), Act.Undeclared) else emptyList() }
             replies(ReplyMode.entries.toSet()) { listOf(Act.Answer(it.revision, it.query)) }
             rule("stale-does-not-change-context") { step ->
@@ -107,7 +112,7 @@ class GeneratedScenariosTest {
                     false
                 } else {
                     val action = input.action
-                    action is Act.Answer && action.value == "A" && step.before.context.query == "B" && step.before.context.phase == Phase.Loading
+                    action is Act.Answer && action.value == "A" && step.before.context.query == "B" && step.before.context is Context.Loading
                 }
             }
         }
@@ -157,7 +162,7 @@ class GeneratedScenariosTest {
         val exhausted = model().generate(maxDecisions = 1)
         assertTrue(exhausted.exploration.truncated)
         assertFailsWith<AssertionError> { exhausted.assertSuccess() }
-        val noReplies = machine().scenarios(Context()) { actions(Act.Edit("A")) }.generate(maxDepth = 3)
+        val noReplies = machine().scenarios(Context.Idle()) { actions(Act.Edit("A")) }.generate(maxDepth = 3)
         assertTrue(
             noReplies.requirements
                 .missing(noReplies.exploration.coverage)
@@ -167,14 +172,14 @@ class GeneratedScenariosTest {
         assertFailsWith<AssertionError> { noReplies.assertSuccess() }
         val impossible =
             machine()
-                .scenarios(Context()) { goal("impossible") { false } }
+                .scenarios(Context.Idle()) { goal("impossible") { false } }
                 .generate(CoverageTarget.Custom(CoverageRequirements()), maxDepth = 2)
         assertEquals(setOf("impossible"), impossible.missingGoals)
         assertFailsWith<AssertionError> { impossible.assertSuccess() }
     }
 
     @Test fun rulesAreCheckedOnStartAndIgnoredInputsAndThrownAssertionsAreReported() {
-        val start = machine().scenarios(Context()) { rule("initial") { it.after.context.query == "missing" } }.generate()
+        val start = machine().scenarios(Context.Idle()) { rule("initial") { it.after.context.query == "missing" } }.generate()
         assertEquals(
             1,
             start.exploration.failures
@@ -183,7 +188,7 @@ class GeneratedScenariosTest {
         )
         val ignored =
             machine()
-                .scenarios(Context()) {
+                .scenarios(Context.Idle()) {
                     inputs { _, now, _ -> listOf(MachineInput.Dispatch(Act.Undeclared, now)) }
                     rule("ignored") { step ->
                         if (step.input is MachineInput.Dispatch) throw AssertionError("failed assertion")
@@ -200,19 +205,19 @@ class GeneratedScenariosTest {
 
     @Test fun invalidConfigurationAndBackwardsTimeFailBeforeBeingAccepted() {
         assertFailsWith<IllegalArgumentException> {
-            machine().scenarios(Context()) {
+            machine().scenarios(Context.Idle()) {
                 rule("same") { true }
                 rule("same") { true }
             }
         }
         assertFailsWith<IllegalArgumentException> {
-            machine().scenarios(Context()) {
+            machine().scenarios(Context.Idle()) {
                 goal("same") { true }
                 goal("same") { true }
             }
         }
         assertFailsWith<IllegalArgumentException> {
-            machine().scenarios(Context()) { inputs { _, _, _ -> listOf(MachineInput.Dispatch(Act.Edit("A"), MachineTime((-1).milliseconds))) } }.generate()
+            machine().scenarios(Context.Idle()) { inputs { _, _, _ -> listOf(MachineInput.Dispatch(Act.Edit("A"), MachineTime((-1).milliseconds))) } }.generate()
         }
         assertFailsWith<IllegalArgumentException> { model().record(MachineScenario("no-start", emptyList())) }
     }

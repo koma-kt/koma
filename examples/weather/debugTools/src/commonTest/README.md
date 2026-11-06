@@ -23,15 +23,15 @@ tests use Ktor MockEngine, never the public weather server.
 ## Drive an actual machine
 
 ```kotlin
-CitySearchMachine.create().test(scope = this, initial = CitySearchState()) {
+CitySearchMachine.create().test(scope = this, initial = CitySearchState.Idle()) {
     dispatch(action = CitySearchAction.ChangeQuery(query = "London"))
-    expectState<RequestState.Debouncing>(select = { it.phase })
+    expectState<CitySearchState.Debouncing>()
     advanceTimeBy(duration = 350.milliseconds)
-    expectState<RequestState.Loading>(select = { it.phase })
+    expectState<CitySearchState.Loading>()
     completeCommand { command ->
         CitySearchAction.Found(revision = command.revision, results = emptyList())
     }
-    expectState<RequestState.Success<List<CityOption>>>(select = { it.phase })
+    expectState<CitySearchState.Success>()
 }
 ```
 

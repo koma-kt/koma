@@ -10,11 +10,13 @@ import actron.example.weather.feature.currentweather.presentation.CurrentWeather
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
 import actron.example.weather.feature.currentweather.presentation.LoadCurrentWeather
 import actron.example.weather.feature.currentweather.presentation.currentWeatherHandler
+import actron.example.weather.feature.currentweather.presentation.toRequestState
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastAction
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastState
 import actron.example.weather.feature.hourlyforecast.presentation.LoadHourlyForecast
 import actron.example.weather.feature.hourlyforecast.presentation.hourlyForecastHandler
+import actron.example.weather.feature.hourlyforecast.presentation.toRequestState
 import actron.example.weather.feature.weather.domain.HourlyForecastRepository
 import actron.example.weather.feature.weather.domain.WeatherRepository
 import actron.example.weather.feature.weather.presentation.CityWeatherMachine
@@ -26,6 +28,7 @@ import actron.example.weather.feature.weatheradvice.presentation.LoadWeatherAdvi
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceAction
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceMachine
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceState
+import actron.example.weather.feature.weatheradvice.presentation.toAdvicePhase
 import actron.example.weather.feature.weatheradvice.presentation.weatherAdviceHandler
 import actron.observability.StoreInstanceId
 import actron.statechart.machine.BridgeMessage
@@ -86,7 +89,7 @@ class WeatherMachines(
 
     val state =
         combine(flow = screen.state, flow2 = current.state, flow3 = hourly.state, flow4 = advice.state, transform = { parent, current, hourly, advice ->
-            WeatherContext(city = parent.context.city, current = current.context.phase, hourly = hourly.context.phase, advice = advice.context.phase)
+            WeatherContext(city = parent.context.city, current = current.context.toRequestState(), hourly = hourly.context.toRequestState(), advice = advice.context.toAdvicePhase())
         }).stateIn(scope = scope, started = SharingStarted.Eagerly, initialValue = initial.context())
 
     init {

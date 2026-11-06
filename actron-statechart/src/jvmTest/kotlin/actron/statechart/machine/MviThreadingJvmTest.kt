@@ -25,8 +25,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class MviThreadingJvmTest {
-    private data object Active
-
     private data class Append(
         val producer: Int,
         val sequence: Int,
@@ -49,14 +47,12 @@ class MviThreadingJvmTest {
                 val commandsReady = List(2) { CompletableDeferred<Unit>() }
                 val releaseCommands = CompletableDeferred<Unit>()
                 val machine =
-                    typedStateMachine<Context, Active, Append, Int, Output>(
+                    typedStateMachine<Context, Append, Int, Output>(
                         DefinitionId("mvi-threading"),
                         DefinitionVersion("1"),
-                        Active,
-                        readState = { Active },
-                        writeState = { context, _ -> context },
+                        Context(),
                     ) {
-                        state<Active> {
+                        state<Context> {
                             onEnter {
                                 command(0)
                                 command(1)

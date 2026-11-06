@@ -3,6 +3,7 @@
 package actron.statechart.machine
 
 import actron.core.Action
+import actron.statechart.TransitionKind
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -12,21 +13,42 @@ import kotlin.test.assertIs
 import kotlin.test.assertSame
 
 class BehaviorStateSnapshotTest {
-    private sealed interface Phase {
-        data object Idle : Phase
+    private sealed interface SearchState {
+        val query: String
+        val revision: Int
 
-        data object Loading : Phase
+        data class Idle(
+            override val query: String = "",
+            override val revision: Int = 0,
+        ) : SearchState
+
+        data class Loading(
+            override val query: String,
+            override val revision: Int,
+        ) : SearchState
     }
-
-    private data class SearchState(
-        val phase: Phase = Phase.Idle,
-        val query: String = "",
-        val revision: Int = 0,
-    )
 
     private data class Search(
         val query: String,
     ) : Action
+
+    @Test
+    fun initialRootValueMustMatchTheDeclaredStartingType() {
+        val machine =
+            behaviorStateMachine<SearchState, Search, Nothing, Nothing>(
+                id = DefinitionId("initial-type"),
+                version = DefinitionVersion("1"),
+                initialType = SearchState.Idle::class,
+            ) {
+                state<SearchState.Idle>()
+                state<SearchState.Loading>()
+            }
+        val wrong = machine.initialSnapshot(SearchState.Loading("Paris", 1))
+        assertEquals(1, machine.checkInvariants(wrong).size)
+        val decision = machine.decide(wrong, MachineInput.Start(MachineTime.Zero))
+        assertIs<DecisionOutcome.Failed>(decision.outcome)
+        assertEquals(wrong, decision.snapshot)
+    }
 
     @Test
     fun subscriptionKeepsRunningAndAppliesResultsToTheLatestState() =
@@ -38,10 +60,9 @@ class BehaviorStateSnapshotTest {
                 behaviorStateMachine(
                     id = DefinitionId(value = "chat-subscription"),
                     version = DefinitionVersion(value = "1"),
-                    initial = Phase.Idle,
-                    phaseOf = { state: SearchState -> state.phase },
+                    initial = SearchState.Idle(),
                 ) {
-                    state<Phase.Idle> {
+                    state<SearchState.Idle> {
                         onEnter {
                             starts += 1
                             try {
@@ -50,13 +71,13 @@ class BehaviorStateSnapshotTest {
                                 stops += 1
                             }
                         }
-                        on<Search> { action -> updateState(state = state.copy(query = action.query, revision = state.revision + 1)) }
+                        on<Search> { action -> target(state = SearchState.Idle(query = action.query, revision = state.revision + 1), kind = TransitionKind.Internal) }
                     }
                 }
             val store =
                 MachineStore(
                     machine = machine,
-                    context = SearchState(),
+                    context = SearchState.Idle(),
                     handler = CommandHandler<Nothing, Search> { _, _ -> error("No commands") },
                     scope = backgroundScope,
                     coroutineContext = StandardTestDispatcher(testScheduler),
@@ -68,7 +89,7 @@ class BehaviorStateSnapshotTest {
                 messages.send("first")
                 messages.send("second")
                 runCurrent()
-                assertEquals(SearchState(query = "second", revision = 3), store.state.value.context)
+                assertEquals(SearchState.Idle(query = "second", revision = 3), store.state.value.context)
                 assertEquals(1, starts)
                 assertEquals(0, stops)
             } finally {
@@ -85,22 +106,21 @@ class BehaviorStateSnapshotTest {
                 behaviorStateMachine(
                     id = DefinitionId(value = "invalid-update"),
                     version = DefinitionVersion(value = "1"),
-                    initial = Phase.Idle,
-                    phaseOf = { state: SearchState -> state.phase },
+                    initial = SearchState.Idle(),
                 ) {
-                    state<Phase.Idle> {
+                    state<SearchState.Idle> {
                         on<Search> {
                             if (changePhase) {
-                                updateState(state.copy(phase = Phase.Loading))
+                                target(SearchState.Loading(state.query, state.revision), kind = TransitionKind.Internal)
                             } else {
-                                updateState(state.copy(query = "partial"))
-                                transitionTo(state.copy(phase = Phase.Loading))
+                                target(SearchState.Idle(query = "partial"), kind = TransitionKind.Internal)
+                                target(SearchState.Loading(state.query, state.revision))
                             }
                         }
                     }
-                    state<Phase.Loading>()
+                    state<SearchState.Loading>()
                 }
-            val started = machine.decide(machine.initialSnapshot(SearchState()), MachineInput.Start(MachineTime.Zero)).snapshot
+            val started = machine.decide(machine.initialSnapshot(SearchState.Idle()), MachineInput.Start(MachineTime.Zero)).snapshot
             val decision = machine.decide(started, MachineInput.Dispatch(Search("ignored"), MachineTime.Zero))
             assertIs<DecisionOutcome.Failed>(decision.outcome)
             assertEquals(started, decision.snapshot)
@@ -113,17 +133,16 @@ class BehaviorStateSnapshotTest {
             behaviorStateMachine(
                 id = DefinitionId(value = "chat-updates"),
                 version = DefinitionVersion(value = "1"),
-                initial = Phase.Idle,
-                phaseOf = { state: SearchState -> state.phase },
+                initial = SearchState.Idle(),
             ) {
-                state<Phase.Idle> {
+                state<SearchState.Idle> {
                     onEnter { }
-                    on<Search> { action -> updateState(state = state.copy(query = action.query)) }
+                    on<Search> { action -> target(state = SearchState.Idle(query = action.query), kind = TransitionKind.Internal) }
                 }
-                state<Phase.Loading>()
+                state<SearchState.Loading>()
             }
         assertEquals(actron.statechart.TransitionStructure.Conservative, machine.chart.transitionStructure)
-        val initial = SearchState()
+        val initial = SearchState.Idle()
         val started = machine.decide(machine.initialSnapshot(initial), MachineInput.Start(MachineTime.Zero)).snapshot
         val entry =
             started.pendingEntries.values
@@ -138,7 +157,7 @@ class BehaviorStateSnapshotTest {
                 updated.snapshot,
                 MachineInput.EntryResult(
                     entry,
-                    EntryOutput.Transition(context = initial.copy(phase = Phase.Loading), expectedContext = initial),
+                    EntryOutput.Transition(context = SearchState.Loading(initial.query, initial.revision), expectedContext = initial),
                     MachineTime.Zero,
                 ),
             )
@@ -155,16 +174,15 @@ class BehaviorStateSnapshotTest {
             behaviorStateMachine(
                 id = DefinitionId(value = "common-handler"),
                 version = DefinitionVersion(value = "1"),
-                initial = Phase.Idle,
-                phaseOf = { state: SearchState -> state.phase },
+                initial = SearchState.Idle(),
             ) {
-                on<Search> { transitionTo(state = state.copy(phase = Phase.Loading, query = "common")) }
-                state<Phase.Idle> {
-                    on<Search> { transitionTo(state = state.copy(phase = Phase.Loading, query = "local")) }
+                on<Search> { target(state = SearchState.Loading(query = "common", revision = state.revision)) }
+                state<SearchState.Idle> {
+                    on<Search> { target(state = SearchState.Loading(query = "local", revision = state.revision)) }
                 }
-                state<Phase.Loading>()
+                state<SearchState.Loading>()
             }
-        val initial = machine.initialSnapshot(context = SearchState())
+        val initial = machine.initialSnapshot(context = SearchState.Idle())
         val started = machine.decide(initial, MachineInput.Start(now = MachineTime.Zero)).snapshot
         val local = machine.decide(started, MachineInput.Dispatch(action = Search("first"), now = MachineTime.Zero)).snapshot
         assertEquals("local", local.context.query)
@@ -178,20 +196,19 @@ class BehaviorStateSnapshotTest {
             behaviorStateMachine(
                 id = DefinitionId(value = "readonly-action"),
                 version = DefinitionVersion(value = "1"),
-                initial = Phase.Idle,
-                phaseOf = { state: SearchState -> state.phase },
+                initial = SearchState.Idle(),
             ) {
-                state<Phase.Idle> {
+                state<SearchState.Idle> {
                     onEnter { }
                     on<Search> { action ->
                         val before = state
-                        transitionTo(state = state.copy(phase = Phase.Loading, query = action.query, revision = state.revision + 1))
+                        target(state = SearchState.Loading(query = action.query, revision = state.revision + 1))
                         assertSame(expected = before, actual = state)
                     }
                 }
-                state<Phase.Loading>()
+                state<SearchState.Loading>()
             }
-        val initial = machine.initialSnapshot(context = SearchState())
+        val initial = machine.initialSnapshot(context = SearchState.Idle())
         val started = machine.decide(snapshot = initial, input = MachineInput.Start(now = MachineTime.Zero)).snapshot
         val activation =
             started.pendingEntries.values
@@ -199,12 +216,12 @@ class BehaviorStateSnapshotTest {
                 .activation
         val changed = machine.decide(snapshot = started, input = MachineInput.Dispatch(action = Search(query = "London"), now = MachineTime.Zero))
         assertIs<DecisionOutcome.Handled>(value = changed.outcome)
-        assertEquals(expected = SearchState(phase = Phase.Loading, query = "London", revision = 1), actual = changed.snapshot.context)
-        assertEquals(expected = SearchState(), actual = started.context)
+        assertEquals(expected = SearchState.Loading(query = "London", revision = 1), actual = changed.snapshot.context)
+        assertEquals(expected = SearchState.Idle(), actual = started.context)
         val stale =
             machine.decide(
                 snapshot = changed.snapshot,
-                input = MachineInput.EntryResult(activation = activation, output = EntryOutput.Transition(context = SearchState(phase = Phase.Loading, query = "old", revision = 99), expectedContext = SearchState()), now = MachineTime.Zero),
+                input = MachineInput.EntryResult(activation = activation, output = EntryOutput.Transition(context = SearchState.Loading(query = "old", revision = 99), expectedContext = SearchState.Idle()), now = MachineTime.Zero),
             )
         assertIs<DecisionOutcome.Ignored>(value = stale.outcome)
         assertEquals(expected = changed.snapshot, actual = stale.snapshot)
@@ -217,22 +234,21 @@ class BehaviorStateSnapshotTest {
                 behaviorStateMachine(
                     id = DefinitionId(value = "readonly-entry"),
                     version = DefinitionVersion(value = "1"),
-                    initial = Phase.Idle,
-                    phaseOf = { state: SearchState -> state.phase },
+                    initial = SearchState.Idle(),
                 ) {
-                    state<Phase.Idle> {
+                    state<SearchState.Idle> {
                         onEnter {
                             val before = state
-                            transitionTo(state = state.copy(phase = Phase.Loading, query = "Paris", revision = state.revision + 1))
+                            target(state = SearchState.Loading(query = "Paris", revision = state.revision + 1))
                             assertSame(expected = before, actual = state)
                         }
                     }
-                    state<Phase.Loading>()
+                    state<SearchState.Loading>()
                 }
             val store =
                 MachineStore(
                     machine = machine,
-                    context = SearchState(),
+                    context = SearchState.Idle(),
                     handler = CommandHandler<Nothing, Search> { _, _ -> error("No commands") },
                     scope = backgroundScope,
                     coroutineContext = StandardTestDispatcher(scheduler = testScheduler),
@@ -240,7 +256,7 @@ class BehaviorStateSnapshotTest {
             try {
                 store.start()
                 runCurrent()
-                assertEquals(expected = SearchState(phase = Phase.Loading, query = "Paris", revision = 1), actual = store.state.value.context)
+                assertEquals(expected = SearchState.Loading(query = "Paris", revision = 1), actual = store.state.value.context)
             } finally {
                 store.closeAndJoin()
             }

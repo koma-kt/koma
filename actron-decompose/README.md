@@ -18,7 +18,7 @@ Given your machine definition and command handler:
 val store = componentContext.retainedMachine(
     key = "city-search",
     machine = CitySearchMachine.create(),
-    initial = CitySearchState(),
+    initial = CitySearchState.Idle(),
     handler = citySearchHandler(repository),
 )
 ```

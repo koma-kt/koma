@@ -1,7 +1,5 @@
 package actron.example.weather.feature.cities.presentation
 
-import actron.example.weather.core.mvi.RequestState
-import actron.example.weather.core.presentation.resolve
 import actron.example.weather.resources.Res
 import actron.example.weather.resources.cities
 import actron.example.weather.resources.debouncing
@@ -9,6 +7,7 @@ import actron.example.weather.resources.enter_city
 import actron.example.weather.resources.no_cities
 import actron.example.weather.resources.retry
 import actron.example.weather.resources.search_cities
+import actron.example.weather.resources.search_failed
 import actron.example.weather.resources.searching
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -44,7 +43,8 @@ import kotlin.math.sin
 
 @Composable
 fun CitySearchScreen(
-    state: CitySearchUiState,
+    state: CitySearchState,
+    controls: CitySearchControls = CitySearchControls.Interactive,
     modifier: Modifier = Modifier,
     onIntent: (CitySearchIntent) -> Unit,
     settingsAction: @Composable () -> Unit = {},
@@ -67,38 +67,38 @@ fun CitySearchScreen(
                 onValueChange = { onIntent(CitySearchIntent.QueryChanged(it)) },
                 label = { Text(stringResource(resource = Res.string.search_cities)) },
                 singleLine = true,
-                readOnly = state.queryReadOnly,
+                readOnly = controls.readOnly,
                 modifier = Modifier.fillMaxWidth().testTag("city-search"),
             )
-            when (val phase = state.phase) {
-                RequestState.QueryChanged -> {
+            when (state) {
+                is CitySearchState.QueryChanged -> {
                     // Automatic transitions settle before publication; there is no intermediate UI.
                 }
 
-                RequestState.Idle, RequestState.Ready -> {
+                is CitySearchState.Idle -> {
                     Text(stringResource(resource = Res.string.enter_city), modifier = Modifier.testTag("city-search-hint"))
                 }
 
-                RequestState.Debouncing -> {
+                is CitySearchState.Debouncing -> {
                     Text(stringResource(resource = Res.string.debouncing), modifier = Modifier.testTag("city-search-debounce"))
                 }
 
-                RequestState.Loading -> {
+                is CitySearchState.Loading -> {
                     Text(stringResource(resource = Res.string.searching), modifier = Modifier.testTag("city-search-loading"))
                 }
 
-                is RequestState.Error -> {
-                    Text(state.errorMessage.resolve(), color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = { onIntent(CitySearchIntent.Retry) }, enabled = state.enabled) { Text(stringResource(resource = Res.string.retry)) }
+                is CitySearchState.Error -> {
+                    Text(stringResource(resource = Res.string.search_failed), color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { onIntent(CitySearchIntent.Retry) }, enabled = controls.enabled) { Text(stringResource(resource = Res.string.retry)) }
                 }
 
-                is RequestState.Success -> {
-                    if (phase.value.isEmpty()) Text(stringResource(resource = Res.string.no_cities))
-                    for (option in phase.value) {
+                is CitySearchState.Success -> {
+                    if (state.results.isEmpty()) Text(stringResource(resource = Res.string.no_cities))
+                    for (option in state.results) {
                         val city = option.city
                         OutlinedButton(
                             onClick = { onIntent(CitySearchIntent.SelectCity(city)) },
-                            enabled = state.enabled,
+                            enabled = controls.enabled,
                             colors = ButtonDefaults.outlinedButtonColors(disabledContentColor = MaterialTheme.colorScheme.primary),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                             modifier = Modifier.fillMaxWidth().testTag("city-${city.name}"),

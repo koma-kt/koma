@@ -18,11 +18,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
 
 class RetainedMachineTest {
-    private data object Active
-
     private data class Counter(
         val count: Int = 0,
-        val phase: Active = Active,
     )
 
     private data object Increment : Action
@@ -30,14 +27,12 @@ class RetainedMachineTest {
     private sealed interface Output : Event
 
     private fun machine(startCommand: Boolean = true) =
-        typedStateMachine<Counter, Active, Increment, String, Output>(
+        typedStateMachine<Counter, Increment, String, Output>(
             DefinitionId("counter"),
             DefinitionVersion("1"),
-            Active,
-            readState = { it.phase },
-            writeState = { value, phase -> value.copy(phase = phase) },
+            Counter(),
         ) {
-            state<Active> {
+            state<Counter> {
                 onEnter { if (startCommand) command("wait") }
                 internal<Increment> { value, _ -> value.copy(count = value.count + 1) }
             }

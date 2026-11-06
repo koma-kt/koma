@@ -22,10 +22,10 @@ the signatures in `actron-statechart/src/commonMain/kotlin/actron/statechart/mac
 
 - For state-local Kotlin behavior, start with `behaviorStateMachine<State, Action, Command,
   Event>`; use `Nothing` for absent commands/events. `on<Action>` reads immutable `state`
-  and proposes at most one complete replacement with `transitionTo(state = ...)`.
-  For shared context use `phaseOf`; no write lens or separate phase-to-ID map is needed.
+  and proposes at most one complete replacement with `target(state = ...)`.
+  Root targets construct the entire next state. Use read/write bindings only for parallel regions.
   Same-state transitions exit/re-enter and restart entry work. The captured `state` does not
-  change after `transitionTo`. Weather uses this API.
+  change after `target`. Weather uses this API.
 - Suspend `onEnter` runs outside action processing and is cancelled on exit/close. Use ordinary
   Kotlin conditions/delays there, and `command` for the existing command handler integration.
   Late entry outcomes are activation-checked. Resume restarts unfinished entry work from its

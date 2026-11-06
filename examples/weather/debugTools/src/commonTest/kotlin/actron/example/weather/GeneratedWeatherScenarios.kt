@@ -33,7 +33,7 @@ object GeneratedWeatherScenarios {
     suspend fun search(scope: TestScope) =
         recorded(
             machine = CitySearchMachine.create(),
-            context = CitySearchState(),
+            context = CitySearchState.Idle(),
             scope = scope,
         ) { trace ->
             send(action = CitySearchAction.ChangeQuery(query = moscow.name))
@@ -49,22 +49,22 @@ object GeneratedWeatherScenarios {
             assertIs<DecisionOutcome.Ignored>(value = rejected.decision.outcome)
             trace.onDecided(input = InputAttribution.Unattributed, machineInput = lateInput, explained = rejected)
             send(action = lateAction)
-            assertIs<RequestState.Loading>(value = snapshot.context.phase)
+            assertIs<CitySearchState.Loading>(value = snapshot.context)
             val request = runningCommands.single()
             answer(command = request.id, result = CitySearchAction.Found(revision = request.command.revision, results = listOf(CityOption(city = kazan))))
-            assertEquals(expected = kazan, actual = assertIs<RequestState.Success<List<CityOption>>>(value = snapshot.context.phase).value.single().city)
+            assertEquals(expected = kazan, actual = assertIs<CitySearchState.Success>(value = snapshot.context).results.single().city)
             assertTrue(actual = handler.cancelled.isNotEmpty())
         }
 
     suspend fun weather(scope: TestScope) =
         recorded(
             machine = CurrentWeatherMachine.create(),
-            context = CurrentWeatherState(city = kazan),
+            context = CurrentWeatherState.Ready(city = kazan),
             scope = scope,
         ) { _ ->
             send(action = CurrentWeatherAction.Refresh)
             answer(command = runningCommands.single().id, result = CurrentWeatherAction.Loaded(reading = WeatherReading(city = kazan, temperature = 12.0, feelsLike = 10.0, wind = 3.0, code = 0, time = "12:00")))
-            assertIs<RequestState.Success<WeatherReading>>(value = snapshot.context.phase)
+            assertIs<CurrentWeatherState.Success>(value = snapshot.context)
         }
 }
 

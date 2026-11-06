@@ -45,7 +45,7 @@ fun WeatherContext.toUiState(enabled: Boolean): CityWeatherUiState {
                 WeatherText(resource = Res.string.feels_like, arguments = listOf(kotlin.math.round(x = reading.feelsLike).toInt(), kotlin.math.round(x = reading.wind).toInt()))
             }
 
-            RequestState.QueryChanged, RequestState.Debouncing, RequestState.Loading -> {
+            RequestState.Loading -> {
                 WeatherText(resource = Res.string.loading_weather)
             }
 
@@ -121,7 +121,7 @@ private fun adviceText(state: WeatherAdvicePhase): List<WeatherText> =
 private fun forecastStatus(state: RequestState<HourlyForecast>): List<WeatherText> =
     when (state) {
         is RequestState.Success -> emptyList()
-        RequestState.QueryChanged, RequestState.Debouncing, RequestState.Loading -> listOf(WeatherText(resource = Res.string.loading_forecast))
+        RequestState.Loading -> listOf(WeatherText(resource = Res.string.loading_forecast))
         is RequestState.Error -> listOf(WeatherText(resource = Res.string.forecast_failed))
         RequestState.Ready -> listOf(WeatherText(resource = Res.string.forecast_ready))
         RequestState.Idle -> listOf(WeatherText(resource = Res.string.choose_city))

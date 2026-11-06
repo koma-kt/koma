@@ -40,7 +40,7 @@ class DefaultCitySearchComponentFactory(
             componentContext.retainedMachine(
                 key = "city-search",
                 machine = CitySearchMachine.create(),
-                initial = CitySearchState(),
+                initial = CitySearchState.Idle(),
                 handler = citySearchHandler(repository),
                 restoration = session.searchRestoration(),
                 recording = recording,

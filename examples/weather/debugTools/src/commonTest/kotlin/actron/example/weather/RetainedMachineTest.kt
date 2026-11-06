@@ -47,7 +47,7 @@ class RetainedMachineTest {
                 DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper).retainedMachine(
                     key = "weather",
                     machine = CurrentWeatherMachine.create(),
-                    initial = CurrentWeatherState(demoCities.first()),
+                    initial = CurrentWeatherState.Ready(demoCities.first()),
                     handler = handler,
                     coroutineContext = coroutineContext,
                     initialActions = listOf(CurrentWeatherAction.Refresh),
@@ -71,8 +71,8 @@ class RetainedMachineTest {
             val keeper = InstanceKeeperDispatcher()
             val context = DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper)
             val handler = currentWeatherHandler(repository = WeatherRepository { awaitCancellation() })
-            val first = context.retainedMachine("first", CurrentWeatherMachine.create(), CurrentWeatherState(demoCities[0]), handler, coroutineContext = coroutineContext)
-            val second = context.retainedMachine("second", CurrentWeatherMachine.create(), CurrentWeatherState(demoCities[1]), handler, coroutineContext = coroutineContext)
+            val first = context.retainedMachine("first", CurrentWeatherMachine.create(), CurrentWeatherState.Ready(demoCities[0]), handler, coroutineContext = coroutineContext)
+            val second = context.retainedMachine("second", CurrentWeatherMachine.create(), CurrentWeatherState.Ready(demoCities[1]), handler, coroutineContext = coroutineContext)
             testScheduler.runCurrent()
             assertNotSame(first, second)
             assertEquals(demoCities[0], first.state.value.context.city)
@@ -90,7 +90,7 @@ class RetainedMachineTest {
                 DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper).retainedMachine(
                     key = "search",
                     machine = CitySearchMachine.create(),
-                    initial = CitySearchState(),
+                    initial = CitySearchState.Idle(),
                     handler = citySearchHandler(LocalCitySearchRepository),
                     restoration = history.session.searchRestoration(),
                     recording = history.recording(),
