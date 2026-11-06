@@ -1,14 +1,13 @@
 package actron.example.weather
 
 import actron.example.weather.core.mvi.RequestFailure
-import actron.example.weather.core.mvi.RequestState
-import actron.example.weather.feature.cities.domain.CityOption
 import actron.example.weather.feature.cities.presentation.CitySearchAction
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.cities.presentation.CitySearchState
 import actron.statechart.Trigger
 import actron.statechart.test.MachineTestDriver
 import actron.statechart.test.test
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,7 +17,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class CitySearchGraphTest {
     @Test
     fun graphContainsOnlyDeclaredBusinessEdges() {
-        val edges = CitySearchMachine.create().chart.transitions
+        val edges = CitySearchMachine.create { awaitCancellation() }.chart.transitions
         assertEquals(expected = 11, actual = edges.size)
         assertEquals(expected = 2, actual = edges.count { it.trigger == Trigger.Eventless })
         assertEquals(expected = 2, actual = edges.count { it.trigger is Trigger.After })
@@ -34,18 +33,18 @@ class CitySearchGraphTest {
     fun guardCoverageRecordsStaleAndCurrentReplies() =
         runTest {
             val report =
-                CitySearchMachine.create().test(scope = this, initial = CitySearchState()) {
+                CitySearchMachine.create { awaitCancellation() }.test(scope = this, initial = CitySearchState.Idle()) {
                     dispatch(action = CitySearchAction.ChangeQuery(query = "Paris"))
                     advanceTimeBy(duration = 350.milliseconds)
                     dispatch(action = CitySearchAction.Found(revision = 0, results = emptyList()))
                     dispatch(action = CitySearchAction.Failed(revision = 0, message = "old"))
-                    expectState<RequestState.Loading>(select = { it.phase })
-                    completeCommand(result = { CitySearchAction.Found(revision = it.revision, results = emptyList()) })
+                    expectState<CitySearchState.Loading>()
+                    dispatch(CitySearchAction.Found(revision = context.revision, results = emptyList()))
                     dispatch(action = CitySearchAction.ChangeQuery(query = "London"))
                     advanceTimeBy(duration = 350.milliseconds)
-                    completeCommand(result = { CitySearchAction.Failed(revision = it.revision, message = "offline") })
+                    dispatch(CitySearchAction.Failed(revision = context.revision, message = "offline"))
                 }
-            val edges = CitySearchMachine.create().chart.transitions
+            val edges = CitySearchMachine.create { awaitCancellation() }.chart.transitions
             val responses =
                 edges.indices.filter { index ->
                     val trigger = edges[index].trigger
@@ -69,9 +68,9 @@ class CitySearchGraphTest {
         checkRestoration(
             elapsed = 200.milliseconds,
             remaining = 150.milliseconds,
-            before = RequestState.Debouncing,
-            after = RequestState.Loading,
-            commands = 1,
+            before = CitySearchState.Debouncing("Paris", 1),
+            after = CitySearchState.Loading("Paris", 1),
+            pendingEntries = 1,
         )
 
     @Test
@@ -79,20 +78,20 @@ class CitySearchGraphTest {
         checkRestoration(
             elapsed = 8150.milliseconds,
             remaining = 200.milliseconds,
-            before = RequestState.Loading,
-            after = RequestState.Error(cause = RequestFailure.Timeout),
-            commands = 0,
+            before = CitySearchState.Loading("Paris", 1),
+            after = CitySearchState.Error("Paris", 1, cause = RequestFailure.Timeout),
+            pendingEntries = 0,
         )
 
     private fun checkRestoration(
         elapsed: Duration,
         remaining: Duration,
-        before: RequestState<List<CityOption>>,
-        after: RequestState<List<CityOption>>,
-        commands: Int,
+        before: CitySearchState,
+        after: CitySearchState,
+        pendingEntries: Int,
     ) = runTest {
-        val machine = CitySearchMachine.create()
-        val original = MachineTestDriver(machine = machine, context = CitySearchState(), scope = this)
+        val machine = CitySearchMachine.create { awaitCancellation() }
+        val original = MachineTestDriver(machine = machine, context = CitySearchState.Idle(), scope = this)
         val checkpoint =
             try {
                 original.start()
@@ -101,14 +100,14 @@ class CitySearchGraphTest {
             } finally {
                 original.close()
             }
-        val resumed = MachineTestDriver(machine = machine, context = CitySearchState(), scope = this, checkpoint = checkpoint)
+        val resumed = MachineTestDriver(machine = machine, context = CitySearchState.Idle(), scope = this, checkpoint = checkpoint)
         try {
             resumed.start()
             resumed.advanceBy(duration = remaining - 1.milliseconds)
-            assertEquals(expected = before, actual = resumed.snapshot.context.phase)
+            assertEquals(expected = before, actual = resumed.snapshot.context)
             resumed.advanceBy(duration = 1.milliseconds)
-            assertEquals(expected = after, actual = resumed.snapshot.context.phase)
-            assertEquals(expected = commands, actual = resumed.runningCommands.size)
+            assertEquals(expected = after, actual = resumed.snapshot.context)
+            assertEquals(expected = pendingEntries, actual = resumed.snapshot.pendingEntries.size)
             resumed.send(action = CitySearchAction.ChangeQuery(query = ""))
             resumed.assertNoPendingWork()
         } finally {

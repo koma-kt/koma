@@ -529,3 +529,14 @@ marks its conservative edge envelope so the inspector does not imply exact reach
 These additions coexist with the declared typed DSL; Weather city-search keeps its v13
 declared transitions and checkpoint-preserved timers. See
 [the behavior DSL decision](../adr/2026-10-28-behavior-dsl.md).
+
+### 2026-11-06 — Complete root state
+
+Typed and invoked roots use their full state type as graph identity. The target supplies the
+next value, including shared data. Parallel regions own the read/write bindings for their
+part of the enclosing state. Behavior handlers also target a complete value. An internal
+target preserves its activation. This supersedes the earlier root phase and update APIs.
+
+City search uses `ScreenMachine<State, Action, Event>` and dispatches repository outcomes
+from its activation-owned entry. Search definition v15 restores pending entry work and
+its deadline. Command-based definitions continue using the four-parameter machine.

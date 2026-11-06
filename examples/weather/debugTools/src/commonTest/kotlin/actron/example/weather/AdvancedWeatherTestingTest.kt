@@ -11,6 +11,7 @@ import actron.example.weather.feature.weather.presentation.*
 import actron.statechart.Trigger
 import actron.statechart.machine.*
 import actron.statechart.test.*
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 import kotlin.time.Duration.Companion.milliseconds
@@ -25,14 +26,14 @@ class AdvancedWeatherTestingTest {
 
     @Test fun searchLeavesLoadingWithinItsTimeoutIncludingCancellation() =
         runTest {
-            CitySearchMachine.create().test(scope = this, initial = CitySearchState()) {
+            CitySearchMachine.create { awaitCancellation() }.test(scope = this, initial = CitySearchState.Idle()) {
                 dispatch(action = CitySearchAction.ChangeQuery(query = kazan.name))
                 advanceTimeBy(duration = 350.milliseconds)
-                expectState<RequestState.Loading>(select = { it.phase })
+                expectState<CitySearchState.Loading>()
                 advanceTimeBy(duration = 7999.milliseconds)
-                expectState<RequestState.Loading>(select = { it.phase })
+                expectState<CitySearchState.Loading>()
                 advanceTimeBy(duration = 1.milliseconds)
-                assertEquals(expected = RequestFailure.Timeout, actual = expectState<RequestState.Error>(select = { it.phase }).cause)
+                assertEquals(expected = RequestFailure.Timeout, actual = expectState<CitySearchState.Error>().cause)
                 assertTrue(actual = driver.runningCommands.isEmpty())
             }
         }
@@ -41,7 +42,7 @@ class AdvancedWeatherTestingTest {
         runTest(testBody = {
             val report =
                 CurrentWeatherMachine.create().exploreSchedules(
-                    initial = CurrentWeatherState(city = kazan),
+                    initial = CurrentWeatherState.Ready(city = kazan),
                     scope = this,
                     maxDepth = 1,
                     maxRuns = 20,
@@ -59,8 +60,8 @@ class AdvancedWeatherTestingTest {
                         }
                     },
                     check = {
-                        val state = snapshot.context.phase
-                        if (state is RequestState.Success) assertEquals(expected = kazan, actual = state.value.city)
+                        val state = snapshot.context
+                        if (state is CurrentWeatherState.Success) assertEquals(expected = kazan, actual = state.reading.city)
                     },
                 )
             report.assertSuccess()
@@ -70,8 +71,8 @@ class AdvancedWeatherTestingTest {
     @Test fun actualSearchExecutorExploresAnswerBeforeAndAfterQueryReplacement() =
         runTest {
             val report =
-                CitySearchMachine.create().exploreSchedules(
-                    CitySearchState(),
+                CitySearchMachine.create { awaitCancellation() }.exploreSchedules(
+                    CitySearchState.Idle(),
                     this,
                     maxDepth = 4,
                     maxRuns = 20,
@@ -83,18 +84,16 @@ class AdvancedWeatherTestingTest {
                         val state = snapshot.context
                         buildList {
                             if (state.query == moscow.name) add(ScheduleOperation.Send(CitySearchAction.ChangeQuery(kazan.name)))
-                            if (state.phase is RequestState.Debouncing) add(ScheduleOperation.Advance(350.milliseconds))
-                            for (command in runningCommands) {
-                                val city = if (command.command.query == moscow.name) moscow else kazan
-                                add(ScheduleOperation.Answer(command.id, CitySearchAction.Found(command.command.revision, listOf(CityOption(city)))))
+                            if (state is CitySearchState.Debouncing) add(ScheduleOperation.Advance(350.milliseconds))
+                            if (state is CitySearchState.Loading) {
+                                val city = if (state.query == moscow.name) moscow else kazan
+                                add(ScheduleOperation.Send(CitySearchAction.Found(state.revision, listOf(CityOption(city)))))
                             }
                         }
                     },
                     check = {
                         val state = snapshot.context
-                        if (state.query == kazan.name) assertTrue(handler.started.filter { it.command.query == moscow.name }.all { it.id in handler.cancelled })
-                        val phase = state.phase
-                        if (phase is RequestState.Success) assertTrue(phase.value.all { it.city.name == state.query })
+                        if (state is CitySearchState.Success) assertTrue(state.results.all { it.city.name == state.query })
                     },
                 )
             report.assertSuccess()
@@ -103,29 +102,29 @@ class AdvancedWeatherTestingTest {
 
     @Test fun currentWeatherRejectsOtherCityThenAcceptsItsOwnCity() =
         runTest {
-            CurrentWeatherMachine.create().test(scope = this, initial = CurrentWeatherState(city = kazan)) {
+            CurrentWeatherMachine.create().test(scope = this, initial = CurrentWeatherState.Ready(city = kazan)) {
                 dispatch(action = CurrentWeatherAction.Refresh)
                 dispatch(action = CurrentWeatherAction.Loaded(reading = reading(city = moscow)))
-                expectState<RequestState.Loading>(select = { it.phase })
+                expectState<CurrentWeatherState.Loading>()
                 dispatch(action = CurrentWeatherAction.Loaded(reading = reading(city = kazan)))
-                assertEquals(expected = kazan, actual = expectState<RequestState.Success<WeatherReading>>(select = { it.phase }).value.city)
+                assertEquals(expected = kazan, actual = expectState<CurrentWeatherState.Success>().reading.city)
             }
         }
 
     @Test fun executorExploresRestartDuringDebounceAndDuringHttp() =
         runTest {
             val report =
-                CitySearchMachine.create().exploreSchedules(
-                    CitySearchState(),
+                CitySearchMachine.create { awaitCancellation() }.exploreSchedules(
+                    CitySearchState.Idle(),
                     this,
                     maxDepth = 4,
                     maxRuns = 40,
                     setup = { send(CitySearchAction.ChangeQuery(kazan.name)) },
                     choices = { path ->
                         buildList {
-                            if (snapshot.context.phase is RequestState.Debouncing) add(ScheduleOperation.Advance(350.milliseconds))
-                            for (command in runningCommands) add(ScheduleOperation.Answer(command.id, CitySearchAction.Found(command.command.revision, listOf(CityOption(kazan)))))
-                            if (snapshot.context.phase !is RequestState.Success && ScheduleOperation.Restart !in path) add(ScheduleOperation.Restart)
+                            if (snapshot.context is CitySearchState.Debouncing) add(ScheduleOperation.Advance(350.milliseconds))
+                            if (snapshot.context is CitySearchState.Loading) add(ScheduleOperation.Send(CitySearchAction.Found(snapshot.context.revision, listOf(CityOption(kazan)))))
+                            if (snapshot.context !is CitySearchState.Success && ScheduleOperation.Restart !in path) add(ScheduleOperation.Restart)
                         }
                     },
                     check = { assertEquals(kazan.name, snapshot.context.query) },

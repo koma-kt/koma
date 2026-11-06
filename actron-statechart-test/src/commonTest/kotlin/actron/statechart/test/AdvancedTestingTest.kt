@@ -26,7 +26,7 @@ class AdvancedTestingTest {
             val failure =
                 assertFailsWith<CancellationException> {
                     machine().exploreSchedules(
-                        Context(),
+                        Context.Idle,
                         this,
                         setup = {
                             send(Act.Load)
@@ -43,16 +43,15 @@ class AdvancedTestingTest {
             assertTrue(handler.running.isEmpty())
         }
 
-    sealed interface Phase {
-        data object Idle : Phase
+    sealed interface Context {
+        val answers: Set<Int> get() = emptySet()
 
-        data object Loading : Phase
+        data object Idle : Context
+
+        data class Loading(
+            override val answers: Set<Int> = emptySet(),
+        ) : Context
     }
-
-    data class Context(
-        val phase: Phase = Phase.Idle,
-        val answers: Set<Int> = emptySet(),
-    )
 
     sealed interface Act : Action {
         data object Load : Act
@@ -69,26 +68,24 @@ class AdvancedTestingTest {
     sealed interface Ev : Event
 
     private fun machine() =
-        typedStateMachine<Context, Phase, Act, Int, Ev>(
+        typedStateMachine<Context, Act, Int, Ev>(
             DefinitionId("advanced"),
             DefinitionVersion("1"),
-            Phase.Idle,
-            readState = { it.phase },
-            writeState = { ctx, phase -> ctx.copy(phase = phase) },
+            Context.Idle,
         ) {
-            state<Phase.Idle> { on<Act.Load, Phase.Loading> { _, _ -> Phase.Loading } }
-            state<Phase.Loading> {
+            state<Context.Idle> { on<Act.Load, Context.Loading> { _, _ -> Context.Loading() } }
+            state<Context.Loading> {
                 onEnter {
                     command(1)
                     command(2)
                 }
-                internal<Act.Answer>(guard = { _, action -> action.id > 0 }) { ctx, action -> ctx.copy(answers = ctx.answers + action.id) }
-                on<Act.Cancel, Phase.Idle> { _, _ -> Phase.Idle }
+                internal<Act.Answer>(guard = { _, action -> action.id > 0 }) { ctx, action -> Context.Loading(answers = ctx.answers + action.id) }
+                on<Act.Cancel, Context.Idle> { _, _ -> Context.Idle }
             }
         }
 
     private fun trace(vararg events: Pair<Long, Act>) =
-        machine().scenarios(Context()) {}.record(
+        machine().scenarios(Context.Idle) {}.record(
             MachineScenario("temporal", listOf(MachineInput.Start(MachineTime.Zero)) + events.map { (time, action) -> MachineInput.Dispatch(action, MachineTime(time.milliseconds)) }),
         )
 
@@ -99,7 +96,7 @@ class AdvancedTestingTest {
                 10.milliseconds,
                 5,
                 triggered = { (it.input as? MachineInput.Dispatch)?.action == Act.Load },
-                satisfied = { _, later -> later.after.context.answers.size == 2 || later.after.context.phase == Phase.Idle },
+                satisfied = { _, later -> later.after.context.answers.size == 2 || later.after.context == Context.Idle },
             )
         }
 
@@ -143,7 +140,7 @@ class AdvancedTestingTest {
                 }
             }
         val model =
-            machine().scenarios(Context()) {
+            machine().scenarios(Context.Idle) {
                 actions(Act.Load, Act.Answer(1))
                 temporal(rules)
             }
@@ -165,15 +162,15 @@ class AdvancedTestingTest {
         runTest {
             val endings = mutableSetOf<List<Int>>()
             val report =
-                machine().exploreSchedules(Context(), this, setup = { send(Act.Load) }, choices = {
+                machine().exploreSchedules(Context.Idle, this, setup = { send(Act.Load) }, choices = {
                     when {
-                        snapshot.context.phase == Phase.Idle -> emptyList()
+                        snapshot.context == Context.Idle -> emptyList()
                         snapshot.context.answers.size == 2 -> listOf(ScheduleOperation.Send(Act.Cancel))
                         else -> runningCommands.filter { it.command !in snapshot.context.answers }.map { ScheduleOperation.Answer(it.id, Act.Answer(it.command)) }
                     }
                 }, check = {
                     if (snapshot.context.answers.size == 2) endings += snapshot.context.answers.toList()
-                    if (snapshot.context.phase == Phase.Idle) assertEquals(2, handler.cancelled.size)
+                    if (snapshot.context == Context.Idle) assertEquals(2, handler.cancelled.size)
                 })
             report.assertSuccess()
             assertEquals(setOf(listOf(1, 2), listOf(2, 1)), endings)
@@ -183,10 +180,10 @@ class AdvancedTestingTest {
     @Test fun executorReportsMissingBudgetAndCounterexample() =
         runTest {
             val choices: MachineTestDriver<Context, Act, Int, Ev>.(List<ScheduleOperation<Act>>) -> List<ScheduleOperation<Act>> = { listOf(ScheduleOperation.Send(Act.Load)) }
-            val bounded = machine().exploreSchedules(Context(), this, maxDepth = 0, choices = choices, check = {})
+            val bounded = machine().exploreSchedules(Context.Idle, this, maxDepth = 0, choices = choices, check = {})
             assertTrue(bounded.truncated)
             assertFailsWith<AssertionError> { bounded.assertSuccess() }
-            val failed = machine().exploreSchedules(Context(), this, choices = choices, check = { assertEquals(Phase.Idle, snapshot.context.phase) })
+            val failed = machine().exploreSchedules(Context.Idle, this, choices = choices, check = { assertEquals(Context.Idle, snapshot.context) })
             assertEquals(listOf(ScheduleOperation.Send(Act.Load)), failed.failures.single().operations)
         }
 
@@ -196,11 +193,11 @@ class AdvancedTestingTest {
             val mutation = TransitionMutation(TransitionId(0), MutationKind.RemoveTransition)
             val strong =
                 machine.testMutations(listOf(mutation)) { variant ->
-                    val driver = MachineTestDriver(variant, Context(), this)
+                    val driver = MachineTestDriver(variant, Context.Idle, this)
                     try {
                         driver.start()
                         driver.send(Act.Load)
-                        assertEquals(Phase.Loading, driver.snapshot.context.phase)
+                        assertEquals(Context.Loading(), driver.snapshot.context)
                     } finally {
                         driver.close()
                     }
@@ -251,7 +248,7 @@ class AdvancedTestingTest {
             val effect = TransitionMutation(guard.transition, MutationKind.RemoveEffect)
             machine
                 .testMutations(listOf(guard, effect)) { variant ->
-                    val driver = MachineTestDriver(variant, Context(), this)
+                    val driver = MachineTestDriver(variant, Context.Idle, this)
                     try {
                         driver.start()
                         driver.send(Act.Load)
@@ -273,7 +270,7 @@ class AdvancedTestingTest {
         runTest {
             val bounded =
                 machine().exploreSchedules(
-                    Context(),
+                    Context.Idle,
                     this,
                     maxRuns = 1,
                     choices = { listOf(ScheduleOperation.Send(Act.Load)) },
@@ -283,7 +280,7 @@ class AdvancedTestingTest {
             assertFailsWith<AssertionError> { bounded.assertSuccess() }
             val incomplete =
                 machine().exploreSchedules(
-                    Context(),
+                    Context.Idle,
                     this,
                     setup = { send(Act.Load) },
                     choices = { emptyList() },

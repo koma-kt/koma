@@ -106,11 +106,11 @@ For one request type, return an action directly. The library handles result emis
 cancellation, including a late response from a cancelled, non-cooperative request:
 
 ```kotlin
-fun citySearchHandler(searchCities: SearchCitiesUseCase): CommandHandler<SearchCitiesCommand, CitySearchAction> =
+fun currentWeatherHandler(repository: WeatherRepository): CommandHandler<LoadCurrentWeather, CurrentWeatherAction> =
     commandHandler(
-        onFailure = { request, _ -> CitySearchAction.Failed(request.revision, "Could not load cities. Try again.") },
+        onFailure = { _, _ -> CurrentWeatherAction.Failed("Weather request failed") },
     ) { request ->
-        CitySearchAction.Found(request.revision, searchCities(request.query))
+        CurrentWeatherAction.Loaded(repository.load(request.city))
     }
 ```
 

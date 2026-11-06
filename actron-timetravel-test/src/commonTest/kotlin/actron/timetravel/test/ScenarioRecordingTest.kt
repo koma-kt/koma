@@ -43,12 +43,10 @@ class ScenarioRecordingTest {
     @Test
     fun recordingKeepsBeforeInputAfterCoverageAndVirtualTimeIncludingIgnoredStep() {
         val machine =
-            typedStateMachine<Phase, Phase, Act, Unit, Ev>(
+            typedStateMachine<Phase, Act, Unit, Ev>(
                 DefinitionId("recorded"),
                 DefinitionVersion("1"),
                 Phase.Idle,
-                readState = { it },
-                writeState = { _, phase -> phase },
             ) {
                 state<Phase.Idle> { on<Act.Go, Phase.Ready> { _, _ -> Phase.Ready } }
                 state<Phase.Ready> {}

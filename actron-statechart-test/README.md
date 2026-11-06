@@ -165,14 +165,12 @@ its execution scope in `finally`, including after assertion failures. It returns
 `MachineCoverage` report as the driver. No real HTTP or database operation runs.
 
 ```kotlin
-val coverage = CitySearchMachine.create().test(this, CitySearchState()) {
-    expectState<RequestState.Idle> { it.phase }
+val coverage = CitySearchMachine.create { emptyList() }.test(this, CitySearchState.Idle()) {
+    expectState<CitySearchState.Idle>()
     dispatch(CitySearchAction.ChangeQuery("London"))
-    expectState<RequestState.Debouncing> { it.phase }
+    expectState<CitySearchState.Debouncing>()
     advanceTimeBy(350.milliseconds)
-    expectState<RequestState.Loading> { it.phase }
-    completeCommand { command -> CitySearchAction.Found(command.revision, emptyList()) }
-    expectState<RequestState.Success<List<CityOption>>> { it.phase }
+    expectState<CitySearchState.Success>()
 }
 ```
 
@@ -195,26 +193,20 @@ Actron explores executable prefixes through the real pure machine decision funct
 from its initial context. No ordered test script or fabricated command IDs are needed.
 
 ```kotlin
-val model = CitySearchMachine.create().scenarios(CitySearchState()) {
+val model = CitySearchMachine.create(repository).scenarios(CitySearchState.Idle()) {
     actions { snapshot ->
-        // Limit the data domain and number of edits, not their order.
-        if (snapshot.context.revision < 2) {
-            listOf("", "Москва", "Казань").map(CitySearchAction::ChangeQuery)
-        } else {
-            emptyList()
+        buildList {
+            val state = snapshot.context
+            if (state.revision < 2) addAll(listOf("", "Москва", "Казань").map(CitySearchAction::ChangeQuery))
+            if (state is CitySearchState.Loading) {
+                add(CitySearchAction.Found(state.revision, fixtures.getValue(state.query)))
+                add(CitySearchAction.Failed(state.revision, "offline"))
+            }
         }
-    }
-    replies(ReplyMode.entries.toSet()) { command ->
-        // An actual SearchCitiesCommand emitted on this path, with its real revision.
-        listOf(
-            CitySearchAction.Found(command.revision, fixtures.getValue(command.query)),
-            CitySearchAction.Failed(command.revision, "offline"),
-        )
     }
     rule("results-belong-to-query") { step ->
         val state = step.after.context
-        val phase = state.phase
-        phase !is RequestState.Success || phase.value.all { it.city.name == state.query }
+        state !is CitySearchState.Success || state.results.all { it.city.name == state.query }
     }
 }
 val generated = model.generate(maxDepth = 6, maxDecisions = 100_000)
@@ -252,18 +244,18 @@ be deterministic, finite and free of IO; contexts and actions must be immutable.
 stale results can pass without any stale result arriving. Add a goal to require that situation:
 
 ```kotlin
-goal("late-moscow-command") { steps ->
+goal("late-moscow-action") { steps ->
     val step = steps.last()
     val input = step.input
-    if (input !is MachineInput.CommandResult) {
+    if (input !is MachineInput.Dispatch) {
         false
     } else {
         val action = input.action
         action is CitySearchAction.Found &&
             action.results.any { it.city.name == "Москва" } &&
             step.before.context.query == "Казань" &&
-            step.before.context.phase is RequestState.Loading &&
-            input.command !in step.before.commands
+            step.before.context is CitySearchState.Loading &&
+            action.revision != step.before.context.revision
     }
 }
 ```

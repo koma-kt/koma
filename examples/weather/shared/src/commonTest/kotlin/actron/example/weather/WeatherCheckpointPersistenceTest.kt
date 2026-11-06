@@ -8,7 +8,6 @@ import actron.example.weather.app.session.WeatherSavedStateCodec
 import actron.example.weather.app.session.WeatherSession
 import actron.example.weather.app.session.searchRestoration
 import actron.example.weather.core.fixtures.demoCities
-import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.domain.*
 import actron.example.weather.feature.cities.presentation.*
 import actron.statechart.machine.*
@@ -55,9 +54,8 @@ class WeatherCheckpointPersistenceTest {
             fun instance() =
                 DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper).retainedMachine(
                     key = "city-search",
-                    machine = CitySearchMachine.create(),
-                    initial = CitySearchState(),
-                    handler = citySearchHandler(repo),
+                    machine = CitySearchMachine.create(repo),
+                    initial = CitySearchState.Idle(),
                     coroutineContext = coroutineContext,
                     restoration = history.searchRestoration(),
                 )
@@ -73,7 +71,7 @@ class WeatherCheckpointPersistenceTest {
             history = WeatherSavedStateCodec.decodeSession(saved) { clock(testScheduler) }
             machine = instance()
             runCurrent()
-            assertEquals(RequestState.Debouncing, machine.state.value.context.phase)
+            assertEquals(CitySearchState.Debouncing("Paris", 1), machine.state.value.context)
             // The first 100 ms were saved; time while the session was closed does not consume the remaining 250 ms.
             advanceTimeBy(249)
             runCurrent()
@@ -81,7 +79,7 @@ class WeatherCheckpointPersistenceTest {
             advanceTimeBy(1)
             runCurrent()
             assertEquals(listOf("Paris"), requests)
-            assertEquals(RequestState.Success(options), machine.state.value.context.phase)
+            assertEquals(CitySearchState.Success("Paris", 1, options), machine.state.value.context)
             val completed = WeatherSavedStateCodec.encode(history)
             destroy()
             runCurrent()
@@ -89,7 +87,7 @@ class WeatherCheckpointPersistenceTest {
             machine = instance()
             runCurrent()
             assertEquals("Paris", machine.state.value.context.query)
-            assertEquals(RequestState.Success(options), machine.state.value.context.phase)
+            assertEquals(CitySearchState.Success("Paris", 1, options), machine.state.value.context)
             assertEquals(listOf("Paris"), requests)
             destroy()
         }
@@ -115,9 +113,8 @@ class WeatherCheckpointPersistenceTest {
             fun instance() =
                 DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper).retainedMachine(
                     key = "city-search",
-                    machine = CitySearchMachine.create(),
-                    initial = CitySearchState(),
-                    handler = citySearchHandler(repo),
+                    machine = CitySearchMachine.create(repo),
+                    initial = CitySearchState.Idle(),
                     coroutineContext = coroutineContext,
                     restoration = history.searchRestoration(),
                 )
@@ -135,11 +132,11 @@ class WeatherCheckpointPersistenceTest {
             machine = instance()
             runCurrent()
             assertEquals(2, calls)
-            assertEquals(RequestState.Loading, machine.state.value.context.phase)
+            assertEquals(CitySearchState.Loading("Paris", 1), machine.state.value.context)
             machine.dispatch(CitySearchAction.ChangeQuery("Tokyo"))
             runCurrent()
             assertEquals("Tokyo", machine.state.value.context.query)
-            assertEquals(RequestState.Debouncing, machine.state.value.context.phase)
+            assertEquals(CitySearchState.Debouncing("Tokyo", 2), machine.state.value.context)
             destroy()
         }
 

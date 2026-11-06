@@ -31,8 +31,6 @@ class InvocationThreadingJvmTest {
 
     private sealed interface Output : Event
 
-    private data object Active
-
     private data class Context(
         val values: List<Append> = emptyList(),
     )
@@ -61,15 +59,13 @@ class InvocationThreadingJvmTest {
                             }
                         }
                     val machine =
-                        typedInvokedMachine<Context, Active, Append, String, Output, Context, Append, String, Output>(
+                        typedInvokedMachine<Context, Append, String, Output, Context, Append, String, Output>(
                             DefinitionId("thread-parent"),
                             DefinitionVersion("1"),
-                            Active,
-                            readState = { Active },
-                            writeState = { c, _ -> c },
+                            Context(),
                             child = child,
                         ) { invocation ->
-                            state(Active) {
+                            state<Context> {
                                 onEnter { command("parent") }
                                 internal<Append> { c, a ->
                                     threads.add(checkNotNull(Thread.currentThread()))

@@ -9,8 +9,10 @@ import actron.example.weather.core.fixtures.demoCities
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
+import actron.example.weather.feature.currentweather.presentation.toRequestState
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastState
+import actron.example.weather.feature.hourlyforecast.presentation.toRequestState
 import actron.example.weather.feature.weather.domain.HourlyForecastRepository
 import actron.example.weather.feature.weather.domain.WeatherAdvice
 import actron.example.weather.feature.weather.domain.WeatherReading
@@ -20,6 +22,7 @@ import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceAc
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceMachine
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdvicePhase
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceState
+import actron.example.weather.feature.weatheradvice.presentation.toAdvicePhase
 import actron.statechart.machine.Machine
 import actron.statechart.machine.MachineClock
 import actron.statechart.machine.MachineInput
@@ -35,9 +38,9 @@ class WeatherHierarchyTest {
     @Test
     fun eachStandaloneChildStartsReadyWithoutRequestsOrTimers() {
         val city = demoCities.first()
-        assertReady(machine = CurrentWeatherMachine.create(), context = CurrentWeatherState(city = city))
-        assertReady(machine = HourlyForecastMachine.create(), context = HourlyForecastState(city = city))
-        assertReady(machine = WeatherAdviceMachine.create(), context = WeatherAdviceState(city = city))
+        assertReady(machine = CurrentWeatherMachine.create(), context = CurrentWeatherState.Ready(city = city))
+        assertReady(machine = HourlyForecastMachine.create(), context = HourlyForecastState.Ready(city = city))
+        assertReady(machine = WeatherAdviceMachine.create(), context = WeatherAdviceState.Ready(city = city))
     }
 
     @Test
@@ -65,18 +68,46 @@ class WeatherHierarchyTest {
             try {
                 machines.start()
                 testScheduler.runCurrent()
-                assertIs<RequestState.Success<WeatherReading>>(value = machines.current.state.value.context.phase)
-                assertIs<RequestState.Error>(value = machines.hourly.state.value.context.phase)
+                assertIs<RequestState.Success<WeatherReading>>(
+                    value =
+                        machines.current.state.value.context
+                            .toRequestState(),
+                )
+                assertIs<RequestState.Error>(
+                    value =
+                        machines.hourly.state.value.context
+                            .toRequestState(),
+                )
                 machines.advice.dispatch(action = WeatherAdviceAction.Dismiss)
                 testScheduler.runCurrent()
-                assertEquals(expected = WeatherAdvicePhase.Dismissed, actual = machines.advice.state.value.context.phase)
+                assertEquals(
+                    expected = WeatherAdvicePhase.Dismissed,
+                    actual =
+                        machines.advice.state.value.context
+                            .toAdvicePhase(),
+                )
                 machines.screen.dispatch(action = WeatherScreenAction.Refresh)
                 testScheduler.runCurrent()
                 assertEquals(expected = 4, actual = currentCalls)
                 assertEquals(expected = 2, actual = hourlyCalls)
-                assertEquals(expected = RequestState.Loading, actual = machines.current.state.value.context.phase)
-                assertEquals(expected = RequestState.Loading, actual = machines.hourly.state.value.context.phase)
-                assertEquals(expected = WeatherAdvicePhase.Loading, actual = machines.advice.state.value.context.phase)
+                assertEquals(
+                    expected = RequestState.Loading,
+                    actual =
+                        machines.current.state.value.context
+                            .toRequestState(),
+                )
+                assertEquals(
+                    expected = RequestState.Loading,
+                    actual =
+                        machines.hourly.state.value.context
+                            .toRequestState(),
+                )
+                assertEquals(
+                    expected = WeatherAdvicePhase.Loading,
+                    actual =
+                        machines.advice.state.value.context
+                            .toAdvicePhase(),
+                )
                 assertEquals(expected = city, actual = machines.screen.state.value.context.city)
             } finally {
                 machines.onDestroy()
@@ -116,8 +147,18 @@ class WeatherHierarchyTest {
                 machines.advice.dispatch(action = WeatherAdviceAction.Dismiss)
                 testScheduler.runCurrent()
                 assertEquals(expected = 4, actual = cancelled)
-                assertEquals(expected = RequestState.Loading, actual = machines.current.state.value.context.phase)
-                assertEquals(expected = RequestState.Loading, actual = machines.hourly.state.value.context.phase)
+                assertEquals(
+                    expected = RequestState.Loading,
+                    actual =
+                        machines.current.state.value.context
+                            .toRequestState(),
+                )
+                assertEquals(
+                    expected = RequestState.Loading,
+                    actual =
+                        machines.hourly.state.value.context
+                            .toRequestState(),
+                )
                 machines.screen.dispatch(action = WeatherScreenAction.Refresh)
                 testScheduler.runCurrent()
                 assertEquals(expected = 9, actual = started)
@@ -133,7 +174,7 @@ class WeatherHierarchyTest {
     fun adviceRejectsLateResultAfterItsOwnDismissAction() {
         val machine = WeatherAdviceMachine.create()
         val city = demoCities.first()
-        val ready = machine.decide(snapshot = machine.initialSnapshot(context = WeatherAdviceState(city = city)), input = MachineInput.Start(now = MachineTime.Zero))
+        val ready = machine.decide(snapshot = machine.initialSnapshot(context = WeatherAdviceState.Ready(city = city)), input = MachineInput.Start(now = MachineTime.Zero))
         val loading = machine.decide(snapshot = ready.snapshot, input = MachineInput.Dispatch(action = WeatherAdviceAction.Refresh, now = MachineTime.Zero))
         val request =
             loading.snapshot.pendingEntries.values
@@ -152,7 +193,7 @@ class WeatherHierarchyTest {
                     ),
             )
         assertEquals(expected = dismissed.snapshot, actual = late.snapshot)
-        assertEquals(expected = WeatherAdvicePhase.Dismissed, actual = late.snapshot.context.phase)
+        assertEquals(expected = WeatherAdvicePhase.Dismissed, actual = late.snapshot.context.toAdvicePhase())
         assertTrue(actual = request.activation in dismissed.cancelledScopes)
     }
 }

@@ -9,18 +9,16 @@ import actron.statechart.StateId
  * exactly one state. The result is the existing pure InvokedMachine, not a second live Store:
  * commit InvocationDecision before executing its parent/child commands and timers.
  */
-fun <PC : Any, S : Any, PA : Action, PCMD : Any, PE : Event, CC : Any, CA : Action, CCMD : Any, CE : Event> typedInvokedMachine(
+fun <PC : Any, PA : Action, PCMD : Any, PE : Event, CC : Any, CA : Action, CCMD : Any, CE : Event> typedInvokedMachine(
     id: DefinitionId,
     version: DefinitionVersion,
-    initial: S,
-    readState: (PC) -> S,
-    writeState: (PC, S) -> PC,
+    initial: PC,
     child: Machine<CC, CA, CCMD, CE>,
     maxDeliveries: Int = 100,
-    build: TypedStateMachineBuilder<PC, S, PA, PCMD, PE>.(TypedInvocation<PC, PA, PCMD, PE, CC, CA, CCMD, CE>) -> Unit,
+    build: TypedStateMachineBuilder<PC, PC, PA, PCMD, PE>.(TypedInvocation<PC, PA, PCMD, PE, CC, CA, CCMD, CE>) -> Unit,
 ): InvokedMachine<PC, PA, PCMD, PE, CC, CA, CCMD, CE> {
     val invocation = TypedInvocation<PC, PA, PCMD, PE, CC, CA, CCMD, CE>(child, maxDeliveries)
-    val builder = TypedStateMachineBuilder<PC, S, PA, PCMD, PE>(readState, writeState)
+    val builder = TypedStateMachineBuilder<PC, PC, PA, PCMD, PE>({ it }, { _, state -> state })
     builder.build(invocation)
     return invocation.bind(builder.build(id, version, initial))
 }

@@ -13,29 +13,32 @@ import kotlin.test.*
 
 class TypedHierarchyPersistenceTest {
     @Serializable private sealed interface Phase {
-        @Serializable data object Paused : Phase
+        val count: Int get() = 0
+
+        @Serializable data class Paused(
+            override val count: Int = 0,
+        ) : Phase
 
         @Serializable data object Active : Phase
 
         @Serializable data object Nested : Phase
 
-        @Serializable data object First : Phase
+        @Serializable data class First(
+            override val count: Int = 0,
+        ) : Phase
 
-        @Serializable data object Second : Phase
+        @Serializable data class Second(
+            override val count: Int = 0,
+        ) : Phase
 
         @Serializable data object Done : Phase
 
         @Serializable data class Result(
-            val count: Int,
+            override val count: Int,
         ) : Phase
 
         @Serializable data object Finished : Phase
     }
-
-    @Serializable private data class Context(
-        val phase: Phase = Phase.Paused,
-        val count: Int = 0,
-    )
 
     @Serializable private sealed interface Act : Action {
         @Serializable data object Resume : Act
@@ -52,14 +55,12 @@ class TypedHierarchyPersistenceTest {
     @Serializable private sealed interface Ev : Event
 
     private fun hierarchy(deep: Boolean) =
-        typedStateMachine<Context, Phase, Act, String, Ev>(
+        typedStateMachine<Phase, Act, String, Ev>(
             DefinitionId("hierarchy"),
             DefinitionVersion("1"),
-            Phase.Paused,
-            readState = { it.phase },
-            writeState = { context, phase -> context.copy(phase = phase) },
+            Phase.Paused(),
         ) {
-            state(Phase.Paused) {
+            state<Phase.Paused>(enter = { Phase.Paused(it.count) }) {
                 onHistory<Act.Resume, Phase.Active>()
                 on<Act.Restart, Phase.Active>()
             }
@@ -70,16 +71,16 @@ class TypedHierarchyPersistenceTest {
                     // Child handler has priority over this transition.
                     on<Act.Next, Phase.Paused>()
                 }
-                compound<Phase.Nested>(initial = Phase.First) {
-                    state(Phase.First) {
+                compound<Phase.Nested>(initial = Phase.First()) {
+                    state<Phase.First>(enter = { Phase.First(it.count) }) {
                         onEnter {
-                            check(context.phase == Phase.First)
+                            check(state is Phase.First)
                             command("load")
                         }
                         on<Act.Next, Phase.Second>()
                     }
-                    state(Phase.Second) {
-                        internal<Act.Increment> { context, _ -> context.copy(count = context.count + 1) }
+                    state<Phase.Second>(enter = { Phase.Second(it.count) }) {
+                        internal<Act.Increment> { context, _ -> Phase.Second(context.count + 1) }
                     }
                 }
             }
@@ -97,7 +98,7 @@ class TypedHierarchyPersistenceTest {
                         calls++
                         awaitCancellation()
                     }
-                var store = persistence.resume(persistence.save(ExecutorCheckpoint.initial(definition.initialSnapshot(Context()))), handler, backgroundScope)
+                var store = persistence.resume(persistence.save(ExecutorCheckpoint.initial(definition.initialSnapshot(Phase.Paused()))), handler, backgroundScope)
                 store.start()
                 testScheduler.runCurrent()
 
@@ -118,22 +119,22 @@ class TypedHierarchyPersistenceTest {
                     restore()
                 }
                 send(Act.Resume)
-                assertEquals(Phase.First, store.currentState.context.phase)
+                assertEquals(Phase.First(), store.currentState.context)
                 assertEquals(2, calls, "Only the pending load restarts")
                 send(Act.Next)
                 send(Act.Increment)
-                assertEquals(Phase.Second, store.currentState.context.phase)
+                assertEquals(Phase.Second(1), store.currentState.context)
                 send(Act.Pause)
                 assertTrue(
                     store.currentState.configuration.history
                         .isNotEmpty(),
                 )
                 send(Act.Resume)
-                assertEquals(if (deep) Phase.Second else Phase.First, store.currentState.context.phase)
+                assertEquals(if (deep) Phase.Second(1) else Phase.First(1), store.currentState.context)
                 assertEquals(1, store.currentState.context.count)
                 send(Act.Pause)
                 send(Act.Restart)
-                assertEquals(Phase.First, store.currentState.context.phase)
+                assertEquals(Phase.First(1), store.currentState.context)
                 store.close()
             }
         }

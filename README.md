@@ -37,7 +37,7 @@ and dependency APIs are normalized at their boundaries; see the
 ## 1. A Store for a counter
 
 `behaviorStateMachine` declares handlers inside their state. Read the immutable `state` and
-propose its replacement with `transitionTo`. No separate node IDs or reducer registration
+propose its replacement with `target`. No separate node IDs or reducer registration
 strings are needed.
 
 ```kotlin
@@ -59,10 +59,10 @@ val counterMachine = behaviorStateMachine<CounterState, CounterAction, Nothing, 
 ) {
     state<CounterState> {
         on<CounterAction.Increment> {
-            transitionTo(state = state.copy(count = state.count + 1))
+            target(state = state.copy(count = state.count + 1))
         }
         on<CounterAction.Decrement> {
-            transitionTo(state = state.copy(count = (state.count - 1).coerceAtLeast(0)))
+            target(state = state.copy(count = (state.count - 1).coerceAtLeast(0)))
         }
     }
 }
@@ -96,33 +96,35 @@ The Store engine has no public construction DSL. For retained components, use
 
 ## Requests and results
 
-Declare a command in the state's suspend `onEnter` block. Execute it in a `commandHandler`, returning
-a success or failure action. Leaving the owning state cancels its commands; results from
-commands that are no longer registered are rejected by the runtime.
-
-For example, using the domain types from the
-[Weather search machine](examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt):
+A `ScreenMachine<State, Action, Event>` owns the declared graph and runs suspending work in
+`onEnter` after committing the transition. Inject the repository when creating the machine.
+The [city search example](examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt)
+uses this entry block in `Loading`:
 
 ```kotlin
-fun citySearchHandler(
-    searchCities: suspend (String) -> List<CityOption>,
-): CommandHandler<SearchCitiesCommand, CitySearchAction> = commandHandler(
-    onFailure = { request, _ ->
-        CitySearchAction.Failed(request.revision, "Could not load cities. Try again.")
-    },
-) { request ->
-    CitySearchAction.Found(request.revision, searchCities(request.query))
+onEnter {
+    val result = try {
+        CitySearchAction.Found(state.revision, repository.search(state.query.trim()))
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        CitySearchAction.Failed(state.revision, "Could not load cities. Try again.")
+    }
+    dispatch(result)
 }
 ```
 
-Pass this handler to `MachineStore`. `onFailure` maps service errors to domain actions;
-coroutine cancellation is rethrown. For several command types, use
-`commandHandlers { handle<CommandType>(onFailure = ...) { ... } }`.
-For streams with multiple results, use the lower-level `CommandHandler` callback.
+The Store cancels the entry on exit. Its queued result carries the owning activation.
+On restore, a pending entry restarts with its saved state. Use `event(...)` for one-time
+outputs such as requesting an animation. A screen with no such outputs can declare `NoEvent`.
+
+Command-based machines can use `commandHandler` or `commandHandlers` when command identity,
+queue policies or separate command handlers are part of the model.
+
 In the behavior DSL, `on<Action>` is synchronous and transactional; `onEnter` runs outside
 that transaction and may suspend. Use ordinary Kotlin conditions and `delay`. Entry work
 belongs to the state activation and is cancelled on exit. `state` stays the snapshot captured
-at handler entry; `transitionTo` does not mutate it. Even a same-state transition exits and
+at handler entry; `target` does not mutate it. Even a same-state transition exits and
 re-enters, restarting entry work.
 
 See the [behavior DSL contract](actron-statechart/README.md#state-local-kotlin-behavior)
@@ -157,7 +159,7 @@ feature's behaviour.
 
 | Shape | Example | Actron representation |
 |---|---|---|
-| One state with changing data | A counter or an editable form | `behaviorStateMachine`, `on<Action>` and `transitionTo` |
+| One state with changing data | A counter or an editable form | `behaviorStateMachine`, `on<Action>` and `target` |
 | Flat, mutually exclusive phases | Idle → Loading → Content or Error | `typedStateMachine`; `on<Action> { target { ... } }` declares each graph edge |
 | Hierarchical phases | Connected contains Idle and ChatOpen | `compound<Parent>`; one active child at a time |
 | Parallel phases | Connection status and upload status evolve independently | `parallelStateMachine` regions, or nested `parallel<Parent>` |
@@ -171,22 +173,22 @@ for explicit graph declarations, shared context bindings, hierarchy and history.
 `typedStateMachine` remains useful when static transition structure is part of the model;
 behavior handlers use ordinary Kotlin and expose a conservative graph of possible targets.
 
-Declare a destination once, with an optional condition and context update:
+Declare a destination once, with an optional guard:
 
 ```kotlin
-state<RequestState.Loading> {
+state<CitySearchState.Loading> {
     on<CitySearchAction.Found> {
         guard { action -> action.revision == state.revision }
-        target { action -> RequestState.Success(value = action.results) }
+        target { action -> CitySearchState.Success(state.query, state.revision, action.results) }
     }
     after(8.seconds) {
-        target { RequestState.Error(cause = RequestFailure.Timeout) }
+        target { CitySearchState.Error(state.query, state.revision, RequestFailure.Timeout) }
     }
 }
 ```
 
-The return type of `target` supplies the graph destination. Use `update { action ->
-state.copy(...) }` when the transition also changes shared data; `target` owns the phase.
+The return type of `target` supplies the graph destination. Its value is the entire next state.
+Only parallel regions bind an individual field through `readState` and `writeState`.
 See the [transition guide](actron-statechart/README.md#declaring-a-transition-with-one-target-type)
 and the complete [city search machine](examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt).
 

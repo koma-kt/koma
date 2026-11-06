@@ -56,6 +56,13 @@ class MachineStateBuilder<C : Any, A : Action, CMD : Any, E : Event>
         private val implementation: MachineBuilder<C, A, CMD, E>,
         private val transitions: MutableList<Transition>,
     ) {
+        internal fun entryActivity(block: suspend ScreenEntryScope<C, A, E>.() -> Unit) {
+            require(source !in implementation.activities) { "Only one onEnter per state" }
+            implementation.activities[source] = { execution ->
+                BehaviorEntryScope<C, A, CMD, E>(execution.context, execution.now, execution.publish, execution.execute).block()
+            }
+        }
+
         inline fun <reified T : A> on(
             target: StateId,
             noinline guard: (C, T) -> Boolean = { _, _ -> true },

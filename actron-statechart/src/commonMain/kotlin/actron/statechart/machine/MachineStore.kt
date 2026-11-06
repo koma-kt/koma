@@ -153,6 +153,18 @@ fun <C : Any, A : Action, CMD : Any, E : Event> MachineStore(
     builder: MachineConfiguration<C, A, E>.() -> Unit = {},
 ): MachineStore<C, A, CMD, E> = MachineStoreImpl(machine, context, handler, scope, clock, coroutineContext, admission, observers, mailbox, builder)
 
+fun <C : Any, A : Action, E : Event> MachineStore(
+    machine: ScreenMachine<C, A, E>,
+    context: C,
+    scope: CoroutineScope,
+    clock: MachineClock = MachineClock.monotonic(),
+    coroutineContext: CoroutineContext = kotlinx.coroutines.Dispatchers.Default,
+    admission: AdmissionPolicy = AdmissionPolicy.Unbounded,
+    observers: List<DecisionObserver<C, A, Unit, E>> = emptyList(),
+    mailbox: MailboxConfig<E> = MailboxConfig(),
+    builder: MachineConfiguration<C, A, E>.() -> Unit = {},
+): MachineStore<C, A, Unit, E> = MachineStore(machine, context, noCommandHandler(), scope, clock, coroutineContext, admission, observers, mailbox, builder)
+
 @OptIn(InternalActronApi::class)
 internal class MachineStoreImpl<C : Any, A : Action, CMD : Any, E : Event>(
     private val machine: Machine<C, A, CMD, E>,

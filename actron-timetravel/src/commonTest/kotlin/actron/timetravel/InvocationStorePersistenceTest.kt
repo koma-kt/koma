@@ -13,16 +13,17 @@ import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds
 
 class InvocationStorePersistenceTest {
-    @Serializable private sealed interface Phase {
-        @Serializable data object Idle : Phase
+    @Serializable private sealed interface Parent {
+        val seed: Int
 
-        @Serializable data object Active : Phase
+        @Serializable data class Idle(
+            override val seed: Int = 7,
+        ) : Parent
+
+        @Serializable data class Active(
+            override val seed: Int,
+        ) : Parent
     }
-
-    @Serializable private data class Parent(
-        val phase: Phase = Phase.Idle,
-        val seed: Int = 7,
-    )
 
     @Serializable private sealed interface Act : Action {
         @Serializable data object Open : Act
@@ -42,12 +43,10 @@ class InvocationStorePersistenceTest {
         completeImmediately: Boolean = false,
         policy: ConcurrencyPolicy = ConcurrencyPolicy.Sequential,
         onIdle: (MachineTime) -> Unit = {},
-    ) = typedInvokedMachine<Parent, Phase, Act, String, Finished, Int, Finish, String, Finished>(
+    ) = typedInvokedMachine<Parent, Act, String, Finished, Int, Finish, String, Finished>(
         DefinitionId("parent"),
         DefinitionVersion("1"),
-        Phase.Idle,
-        readState = { it.phase },
-        writeState = { c, phase -> c.copy(phase = phase) },
+        Parent.Idle(),
         child =
             stateMachine(DefinitionId("child"), DefinitionVersion("1"), StateId("Working")) {
                 state(StateId("Working")) {
@@ -69,18 +68,18 @@ class InvocationStorePersistenceTest {
                 state(StateId("Done")) {}
             },
     ) { child ->
-        state(Phase.Idle) {
+        state<Parent.Idle>(enter = { Parent.Idle(it.seed) }) {
             onEnter { onIdle(now) }
-            on<Act.Open, Phase.Active>()
+            on<Act.Open, Parent.Active>()
         }
-        state(Phase.Active) {
+        state<Parent.Active>(enter = { Parent.Active(it.seed) }) {
             onEnter {
                 command("parent")
                 if (parentEvent) event(Finished)
             }
-            internal<Act.Tick> { c, _ -> c.copy(seed = c.seed + 1) }
-            on<Act.Open, Phase.Active>()
-            on<Act.Close, Phase.Idle>()
+            internal<Act.Tick> { c, _ -> Parent.Active(seed = c.seed + 1) }
+            on<Act.Open, Parent.Active>()
+            on<Act.Close, Parent.Idle>()
             invoke(child, context = { it.context.seed }, toChild = { _, send -> if (completeImmediately) send(Finish) }, toParent = { _, send -> send(Act.Close) })
         }
     }
@@ -113,7 +112,7 @@ class InvocationStorePersistenceTest {
                         activeChildren--
                     }
                 }
-            val first = InvokedMachineStore(machine(), Parent(), parentHandler, childHandler, backgroundScope)
+            val first = InvokedMachineStore(machine(), Parent.Idle(), parentHandler, childHandler, backgroundScope)
             first.dispatch(Act.Open)
             testScheduler.runCurrent()
             assertEquals(1, activeParents)
@@ -136,7 +135,7 @@ class InvocationStorePersistenceTest {
             assertEquals(2, calls.count { it == "first" })
             release.complete(Unit)
             testScheduler.runCurrent()
-            assertEquals(Phase.Idle, restored.currentState.parent.context.phase)
+            assertIs<Parent.Idle>(restored.currentState.parent.context)
             assertEquals(ChildInvocation.Dormant, restored.currentState.child)
             assertEquals(1, calls.count { it == "second" })
             assertEquals(0, activeParents)
@@ -157,7 +156,7 @@ class InvocationStorePersistenceTest {
             val parent = CommandHandler<String, Act> { _, _ -> awaitCancellation() }
             val child = CommandHandler<String, Finish> { _, _ -> awaitCancellation() }
             val persistence = invocationPersistence(machine())
-            val first = InvokedMachineStore(machine(), Parent(), parent, child, backgroundScope, clock = clock)
+            val first = InvokedMachineStore(machine(), Parent.Idle(), parent, child, backgroundScope, clock = clock)
             first.dispatch(Act.Open)
             testScheduler.runCurrent()
             testScheduler.advanceTimeBy(4000)
@@ -170,10 +169,10 @@ class InvocationStorePersistenceTest {
             testScheduler.runCurrent()
             testScheduler.advanceTimeBy(5999)
             testScheduler.runCurrent()
-            assertEquals(Phase.Active, next.currentState.parent.context.phase)
+            assertIs<Parent.Active>(next.currentState.parent.context)
             testScheduler.advanceTimeBy(1)
             testScheduler.runCurrent()
-            assertEquals(Phase.Idle, next.currentState.parent.context.phase)
+            assertIs<Parent.Idle>(next.currentState.parent.context)
             assertEquals(ChildCheckpoint.Dormant, next.checkpoint().child)
             assertTrue(
                 next
@@ -191,7 +190,7 @@ class InvocationStorePersistenceTest {
             val store =
                 InvokedMachineStore(
                     machine(),
-                    Parent(),
+                    Parent.Idle(),
                     CommandHandler { _, _ -> awaitCancellation() },
                     CommandHandler { _, results ->
                         active++
@@ -217,12 +216,12 @@ class InvocationStorePersistenceTest {
             store.dispatchChild(oldOwner, Finish)
             testScheduler.advanceTimeBy(101)
             testScheduler.runCurrent()
-            assertEquals(Phase.Active, store.currentState.parent.context.phase)
+            assertIs<Parent.Active>(store.currentState.parent.context)
             assertEquals(newOwner, assertIs<ChildInvocation.Active<Int>>(store.currentState.child).owner)
             assertEquals(1, active)
             store.dispatchChild(newOwner, Finish)
             testScheduler.runCurrent()
-            assertEquals(Phase.Idle, store.currentState.parent.context.phase)
+            assertIs<Parent.Idle>(store.currentState.parent.context)
             assertEquals(0, active)
             store.close()
             testScheduler.advanceTimeBy(101)
@@ -234,7 +233,7 @@ class InvocationStorePersistenceTest {
     fun recoveryWaitsForDecisionReconcilesWithoutRepeatingAndStartsQueuedWorkNormally() =
         runTest {
             val persistence = invocationPersistence(machine())
-            val original = InvokedMachineStore(machine(), Parent(), CommandHandler { _, _ -> awaitCancellation() }, CommandHandler { _, _ -> awaitCancellation() }, backgroundScope)
+            val original = InvokedMachineStore(machine(), Parent.Idle(), CommandHandler { _, _ -> awaitCancellation() }, CommandHandler { _, _ -> awaitCancellation() }, backgroundScope)
             original.dispatch(Act.Open)
             testScheduler.runCurrent()
             val saved = persistence.save(original)
@@ -271,7 +270,7 @@ class InvocationStorePersistenceTest {
             testScheduler.runCurrent()
             assertEquals(listOf("check-status", "second"), executions)
             assertEquals(1, selections, "Never-run queued work must not be reconciled")
-            assertEquals(Phase.Idle, restored.currentState.parent.context.phase)
+            assertIs<Parent.Idle>(restored.currentState.parent.context)
             restored.close()
         }
 
@@ -281,7 +280,7 @@ class InvocationStorePersistenceTest {
             val persistence = invocationPersistence(machine())
             val parent = CommandHandler<String, Act> { _, _ -> awaitCancellation() }
             val handler = CommandHandler<String, Finish> { _, _ -> error("No restart authorized") }
-            val original = InvokedMachineStore(machine(), Parent(), parent, CommandHandler { _, _ -> awaitCancellation() }, backgroundScope)
+            val original = InvokedMachineStore(machine(), Parent.Idle(), parent, CommandHandler { _, _ -> awaitCancellation() }, backgroundScope)
             original.dispatch(Act.Open)
             testScheduler.runCurrent()
             val saved = persistence.save(original)
@@ -321,7 +320,7 @@ class InvocationStorePersistenceTest {
         runTest {
             val errors = mutableListOf<Throwable>()
             var calls = 0
-            val store = InvokedMachineStore(machine(failEntry = true), Parent(), CommandHandler { _, _ -> calls++ }, CommandHandler { _, _ -> calls++ }, backgroundScope, onError = { errors += it })
+            val store = InvokedMachineStore(machine(failEntry = true), Parent.Idle(), CommandHandler { _, _ -> calls++ }, CommandHandler { _, _ -> calls++ }, backgroundScope, onError = { errors += it })
             store.start()
             testScheduler.runCurrent()
             val before = store.currentState
@@ -338,7 +337,7 @@ class InvocationStorePersistenceTest {
     fun retainedEffectsPreventUnsafeSaveAndClosedCheckpointFailsPromptly() =
         runTest {
             val machine = machine(parentEvent = true)
-            val store = InvokedMachineStore(machine, Parent(), CommandHandler { _, _ -> awaitCancellation() }, CommandHandler { _, _ -> awaitCancellation() }, backgroundScope, mailbox = MailboxConfig(policy = { EffectPolicy.Retained() }))
+            val store = InvokedMachineStore(machine, Parent.Idle(), CommandHandler { _, _ -> awaitCancellation() }, CommandHandler { _, _ -> awaitCancellation() }, backgroundScope, mailbox = MailboxConfig(policy = { EffectPolicy.Retained() }))
             store.dispatch(Act.Open)
             testScheduler.runCurrent()
             assertEquals(1, store.mailbox.pending.size)
@@ -357,7 +356,7 @@ class InvocationStorePersistenceTest {
                 val store =
                     InvokedMachineStore(
                         machine(policy = policy),
-                        Parent(),
+                        Parent.Idle(),
                         CommandHandler { _, _ -> awaitCancellation() },
                         CommandHandler { command, _ ->
                             calls += command.command
@@ -397,10 +396,10 @@ class InvocationStorePersistenceTest {
     fun feedbackSettlesBeforeAnyTransientStateCommandStarts() =
         runTest {
             var calls = 0
-            val store = InvokedMachineStore(machine(parentEvent = true, completeImmediately = true), Parent(), CommandHandler { _, _ -> calls++ }, CommandHandler { _, _ -> calls++ }, backgroundScope)
+            val store = InvokedMachineStore(machine(parentEvent = true, completeImmediately = true), Parent.Idle(), CommandHandler { _, _ -> calls++ }, CommandHandler { _, _ -> calls++ }, backgroundScope)
             store.dispatch(Act.Open)
             testScheduler.runCurrent()
-            assertEquals(Phase.Idle, store.currentState.parent.context.phase)
+            assertIs<Parent.Idle>(store.currentState.parent.context)
             assertEquals(ChildInvocation.Dormant, store.currentState.child)
             assertEquals(0, calls)
             store.close()
@@ -411,7 +410,7 @@ class InvocationStorePersistenceTest {
         runTest {
             val persistence = invocationPersistence(machine())
             val parent = CommandHandler<String, Act> { _, _ -> awaitCancellation() }
-            val original = InvokedMachineStore(machine(), Parent(), parent, CommandHandler { _, _ -> awaitCancellation() }, backgroundScope)
+            val original = InvokedMachineStore(machine(), Parent.Idle(), parent, CommandHandler { _, _ -> awaitCancellation() }, backgroundScope)
             original.dispatch(Act.Open)
             testScheduler.runCurrent()
             val saved = persistence.save(original)
@@ -434,7 +433,7 @@ class InvocationStorePersistenceTest {
             testScheduler.runCurrent()
             assertEquals("cannot reconcile", errors.single().message)
             assertEquals(listOf("second"), calls)
-            assertEquals(Phase.Idle, restored.currentState.parent.context.phase)
+            assertIs<Parent.Idle>(restored.currentState.parent.context)
             assertTrue(
                 restored
                     .checkpoint()
@@ -460,7 +459,7 @@ class InvocationStorePersistenceTest {
                     awaitCancellation()
                 }
             val persistence = invocationPersistence(machine())
-            val first = InvokedMachineStore(machine(), Parent(), parent, child, scope)
+            val first = InvokedMachineStore(machine(), Parent.Idle(), parent, child, scope)
             try {
                 val saved = persistence.save(first)
                 assertFalse(first.currentState.parent.isStarted)
@@ -498,7 +497,7 @@ class InvocationStorePersistenceTest {
             val store =
                 InvokedMachineStore(
                     machine(onIdle = { idleTimes += it }),
-                    Parent(),
+                    Parent.Idle(),
                     CommandHandler { _, _ -> awaitCancellation() },
                     CommandHandler { _, results ->
                         sinks += results
@@ -515,7 +514,7 @@ class InvocationStorePersistenceTest {
             time = MachineTime(5.seconds)
             testScheduler.runCurrent()
             assertEquals(listOf(MachineTime.Zero, MachineTime(5.seconds)), idleTimes)
-            assertEquals(Phase.Idle, store.currentState.parent.context.phase)
+            assertIs<Parent.Idle>(store.currentState.parent.context)
             store.close()
         }
 }

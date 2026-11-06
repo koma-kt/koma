@@ -9,7 +9,7 @@ import actron.example.weather.core.fixtures.demoCities
 import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.domain.CityOption
 import actron.example.weather.feature.cities.domain.CitySearchRepository
-import actron.example.weather.feature.cities.presentation.toUiState
+import actron.example.weather.feature.cities.presentation.CitySearchState
 import actron.example.weather.feature.weather.data.SampleHourlyRepository
 import actron.example.weather.feature.weather.data.SampleWeatherRepository
 import actron.example.weather.feature.weather.domain.WeatherReading
@@ -101,12 +101,7 @@ class WeatherAppTest {
     @Test
     fun debounceDoesNotClaimRequestIsAlreadyRunning() =
         runComposeUiTest {
-            val ui =
-                androidx.compose.runtime.mutableStateOf(
-                    actron.example.weather.feature.cities.presentation
-                        .CitySearchState("P", actron.example.weather.core.mvi.RequestState.Debouncing)
-                        .toUiState(true),
-                )
+            val ui = androidx.compose.runtime.mutableStateOf<CitySearchState>(CitySearchState.Debouncing("P", 1))
             setContent {
                 androidx.compose.material3.MaterialTheme {
                     actron.example.weather.feature.cities.presentation
@@ -115,7 +110,7 @@ class WeatherAppTest {
             }
             onNodeWithTag("city-search-debounce").assertIsDisplayed()
             onNodeWithTag("city-search-loading").assertDoesNotExist()
-            runOnIdle { ui.value = ui.value.copy(phase = actron.example.weather.core.mvi.RequestState.Loading) }
+            runOnIdle { ui.value = CitySearchState.Loading("P", 1) }
             onNodeWithTag("city-search-loading").assertIsDisplayed()
             onNodeWithTag("city-search-debounce").assertDoesNotExist()
         }

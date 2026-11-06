@@ -135,7 +135,7 @@ internal fun WeatherRecordingScreen(
         Text(stringResource(resource = Res.string.select_recording), Modifier.padding(24.dp))
     } else {
         when (val screen = selection.single().snapshot.screen) {
-            is WeatherDisplay.Search -> CitySearchScreen(screen.state.toUiState(enabled = false), onIntent = {}, settingsAction = { WeatherSettingsButton(onSettings) })
+            is WeatherDisplay.Search -> CitySearchScreen(screen.state, controls = CitySearchControls.ReadOnly, onIntent = {}, settingsAction = { WeatherSettingsButton(onSettings) })
             is WeatherDisplay.Weather -> CityWeatherScreen(screen.state.toUiState(enabled = false), onIntent = {})
         }
     }

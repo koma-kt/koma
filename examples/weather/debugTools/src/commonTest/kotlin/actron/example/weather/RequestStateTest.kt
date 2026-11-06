@@ -42,7 +42,6 @@ class RequestStateTest {
             listOf(
                 RequestState.Idle,
                 RequestState.Ready,
-                RequestState.Debouncing,
                 RequestState.Loading,
                 RequestState.Success("answer"),
                 RequestState.Error(cause = RequestFailure.Unavailable(message = "offline")),

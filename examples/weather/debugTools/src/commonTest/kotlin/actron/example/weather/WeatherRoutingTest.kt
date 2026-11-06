@@ -81,8 +81,8 @@ class WeatherRoutingTest {
                         snapshot =
                             cut.current.snapshot.copy(
                                 context =
-                                    cut.current.snapshot.context
-                                        .copy(city = demoCities[1]),
+                                    actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
+                                        .Ready(demoCities[1]),
                             ),
                     ),
             )

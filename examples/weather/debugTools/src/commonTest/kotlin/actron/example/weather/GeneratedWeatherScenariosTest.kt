@@ -3,17 +3,18 @@ package actron.example.weather
 import actron.example.weather.app.debug.WeatherDisplay
 import actron.example.weather.app.debug.WeatherRecording
 import actron.example.weather.app.debug.WeatherRecordingFrame
-import actron.example.weather.core.mvi.RequestState
-import actron.example.weather.feature.cities.domain.CityOption
 import actron.example.weather.feature.cities.presentation.CitySearchAction
 import actron.example.weather.feature.cities.presentation.CitySearchState
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
+import actron.example.weather.feature.currentweather.presentation.toRequestState
+import actron.example.weather.feature.hourlyforecast.presentation.toRequestState
 import actron.example.weather.feature.weather.presentation.WeatherContext
 import actron.example.weather.feature.weather.presentation.toUiState
 import actron.statechart.machine.*
 import actron.statechart.test.*
 import actron.timetravel.HistoryExportSettings
 import actron.timetravel.test.recording
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.*
@@ -25,7 +26,7 @@ class GeneratedWeatherScenariosTest {
             trace.assertSuccess()
             val machine =
                 actron.example.weather.feature.cities.presentation.CitySearchMachine
-                    .create()
+                    .create { awaitCancellation() }
             var snapshot = trace.initial
             for (step in trace.steps) {
                 val replayed = machine.decide(snapshot = snapshot, input = step.input)
@@ -45,8 +46,8 @@ class GeneratedWeatherScenariosTest {
             assertEquals(
                 expected = "Казань",
                 actual =
-                    assertIs<RequestState.Success<List<CityOption>>>(value = screen.state.phase)
-                        .value
+                    assertIs<CitySearchState.Success>(value = screen.state)
+                        .results
                         .single()
                         .city.name,
             )
@@ -86,7 +87,7 @@ fun <A : actron.core.Action, CMD : Any, E : actron.core.Event> weatherRecording(
         describe = { Json.encodeToJsonElement(CurrentWeatherState.serializer(), it) },
         snapshot = { step, coverage ->
             WeatherRecordingFrame(
-                WeatherDisplay.Weather(WeatherContext(city = step.after.context.city, current = step.after.context.phase)),
+                WeatherDisplay.Weather(WeatherContext(city = step.after.context.city, current = step.after.context.toRequestState())),
                 step.after.configuration.active
                     .map { it.value },
                 coverage.hits.mapKeys { it.key.index },

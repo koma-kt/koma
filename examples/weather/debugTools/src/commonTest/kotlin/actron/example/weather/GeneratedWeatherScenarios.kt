@@ -4,6 +4,7 @@ import actron.core.Action
 import actron.core.Event
 import actron.core.InputAttribution
 import actron.example.weather.core.domain.City
+import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.domain.CityOption
 import actron.example.weather.feature.cities.presentation.*
@@ -13,12 +14,15 @@ import actron.example.weather.feature.currentweather.presentation.CurrentWeather
 import actron.example.weather.feature.weather.domain.WeatherReading
 import actron.statechart.machine.DecisionOutcome
 import actron.statechart.machine.DecisionTraceObserver
+import actron.statechart.machine.EntryOutput
 import actron.statechart.machine.ExplainedDecision
 import actron.statechart.machine.Machine
 import actron.statechart.machine.MachineInput
 import actron.statechart.machine.MachineSnapshot
 import actron.statechart.machine.MachineTime
 import actron.statechart.test.*
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.TestScope
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -30,41 +34,57 @@ object GeneratedWeatherScenarios {
     val moscow = City(name = "Москва", latitude = 55.75, longitude = 37.62)
     val kazan = City(name = "Казань", latitude = 55.79, longitude = 49.12)
 
-    suspend fun search(scope: TestScope) =
-        recorded(
-            machine = CitySearchMachine.create(),
-            context = CitySearchState(),
+    suspend fun search(scope: TestScope): ScenarioTrace<CitySearchState, CitySearchAction, Unit, NoEvent> {
+        val finishKazan = CompletableDeferred<Unit>()
+        return recorded(
+            machine =
+                CitySearchMachine.create { query ->
+                    if (query == moscow.name) awaitCancellation()
+                    assertEquals(kazan.name, query)
+                    finishKazan.await()
+                    listOf(CityOption(city = kazan))
+                },
+            context = CitySearchState.Idle(),
             scope = scope,
         ) { trace ->
             send(action = CitySearchAction.ChangeQuery(query = moscow.name))
             advanceBy(duration = 350.milliseconds)
-            val old = runningCommands.single().id
+            val old =
+                snapshot.pendingEntries.values
+                    .single()
+                    .activation
             val oldRevision = snapshot.context.revision
             send(action = CitySearchAction.ChangeQuery(query = kazan.name))
             advanceBy(duration = 350.milliseconds)
             val lateAction = CitySearchAction.Found(revision = oldRevision, results = listOf(CityOption(city = moscow)))
-            val lateInput = MachineInput.CommandResult(command = old, action = lateAction, now = MachineTime(sinceStart = scope.testScheduler.currentTime.milliseconds))
-            // Inject an obsolete command result through the same pure decision entrypoint as the queue.
+            val lateInput =
+                MachineInput.EntryResult(
+                    activation = old,
+                    output = EntryOutput.Dispatch(lateAction),
+                    now = MachineTime(sinceStart = scope.testScheduler.currentTime.milliseconds),
+                )
+            // Inject an obsolete entry result through the same pure decision entrypoint as the queue.
             val rejected = machine.decideExplained(snapshot = snapshot, input = lateInput)
             assertIs<DecisionOutcome.Ignored>(value = rejected.decision.outcome)
             trace.onDecided(input = InputAttribution.Unattributed, machineInput = lateInput, explained = rejected)
             send(action = lateAction)
-            assertIs<RequestState.Loading>(value = snapshot.context.phase)
-            val request = runningCommands.single()
-            answer(command = request.id, result = CitySearchAction.Found(revision = request.command.revision, results = listOf(CityOption(city = kazan))))
-            assertEquals(expected = kazan, actual = assertIs<RequestState.Success<List<CityOption>>>(value = snapshot.context.phase).value.single().city)
-            assertTrue(actual = handler.cancelled.isNotEmpty())
+            assertIs<CitySearchState.Loading>(value = snapshot.context)
+            finishKazan.complete(Unit)
+            settle()
+            assertEquals(expected = kazan, actual = assertIs<CitySearchState.Success>(value = snapshot.context).results.single().city)
+            assertTrue(actual = snapshot.pendingEntries.isEmpty())
         }
+    }
 
     suspend fun weather(scope: TestScope) =
         recorded(
             machine = CurrentWeatherMachine.create(),
-            context = CurrentWeatherState(city = kazan),
+            context = CurrentWeatherState.Ready(city = kazan),
             scope = scope,
         ) { _ ->
             send(action = CurrentWeatherAction.Refresh)
             answer(command = runningCommands.single().id, result = CurrentWeatherAction.Loaded(reading = WeatherReading(city = kazan, temperature = 12.0, feelsLike = 10.0, wind = 3.0, code = 0, time = "12:00")))
-            assertIs<RequestState.Success<WeatherReading>>(value = snapshot.context.phase)
+            assertIs<CurrentWeatherState.Success>(value = snapshot.context)
         }
 }
 

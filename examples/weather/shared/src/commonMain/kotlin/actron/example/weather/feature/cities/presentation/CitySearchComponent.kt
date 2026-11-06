@@ -5,6 +5,7 @@ import actron.example.weather.core.component.BaseComponent
 import actron.example.weather.core.component.BridgeEndpoint
 import actron.example.weather.core.domain.City
 import actron.example.weather.core.mvi.NoEvent
+import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.statechart.machine.MachineSnapshot
 import actron.statechart.machine.MachineStore
 import androidx.compose.runtime.Composable
@@ -41,7 +42,7 @@ class DefaultCitySearchComponent(
     componentContext: ComponentContext,
     private val endpoint: BridgeEndpoint<Nothing, CitySearchComponent.News>,
     coroutineContext: CoroutineContext,
-    private val store: MachineStore<CitySearchState, CitySearchAction, SearchCitiesCommand, NoEvent>,
+    private val store: MachineStore<CitySearchState, CitySearchAction, Unit, NoEvent>,
     private val settingsAction: @Composable () -> Unit,
 ) : CitySearchComponent,
     ComponentContext by componentContext {
@@ -66,8 +67,8 @@ class DefaultCitySearchComponent(
 
     @Composable
     override fun Render() {
-        // The library collects snapshots for UI; formatting is a pure context -> UI projection.
         val snapshot by state.collectAsUiState()
-        CitySearchScreen(snapshot.context.toUiState(enabled = snapshot.isStarted), onIntent = ::onUiEvent, settingsAction = settingsAction)
+        val controls = if (snapshot.isStarted) CitySearchControls.Interactive else CitySearchControls.ReadOnly
+        CitySearchScreen(snapshot.context, controls, onIntent = ::onUiEvent, settingsAction = settingsAction)
     }
 }

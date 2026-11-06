@@ -6,6 +6,8 @@ import actron.statechart.machine.CommandHandler
 import actron.statechart.machine.ExecutorCheckpoint
 import actron.statechart.machine.Machine
 import actron.statechart.machine.MachineStore
+import actron.statechart.machine.ScreenMachine
+import actron.statechart.machine.noCommandHandler
 import actron.statechart.machine.resumeMachineStore
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.essenty.instancekeeper.getOrCreate
@@ -18,6 +20,17 @@ import kotlin.coroutines.CoroutineContext
  * Handlers and recording options must not capture a component, UI scope or bridge endpoint.
  * Initial actions run once for a fresh instance; resumed checkpoints never repeat them.
  */
+fun <C : Any, A : Action, E : Event> ComponentContext.retainedMachine(
+    key: String,
+    machine: ScreenMachine<C, A, E>,
+    initial: C,
+    restoration: MachineRestoration<C, A, Unit, E> = MachineRestoration { definition, context -> ExecutorCheckpoint.initial(definition.initialSnapshot(context)) },
+    recording: MachineRecording<C, A, Unit, E> =
+        MachineRecording { _, _, commands -> MachineDiagnostics(commands) },
+    coroutineContext: CoroutineContext = Dispatchers.Main,
+    initialActions: List<A> = emptyList(),
+): MachineStore<C, A, Unit, E> = retainedMachine(key, machine, initial, noCommandHandler(), restoration, recording, coroutineContext, initialActions)
+
 fun <C : Any, A : Action, CMD : Any, E : Event> ComponentContext.retainedMachine(
     key: String,
     machine: Machine<C, A, CMD, E>,

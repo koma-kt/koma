@@ -24,82 +24,51 @@ import actron.statechart.initialConfiguration
 import actron.statechart.instantTimerCycles
 import actron.statechart.isComplete
 
-/**
- * What an enter hook of a [Machine] sees and may do. It runs inside [Machine.decide], so it is a
- * pure function of its inputs: read [context], [input], [action] and [now], assign [context],
- * register [command]s and emit [event]s. No clock, no random, no repository: whatever the hook
- * needs that is not here belongs in the input or the context.
- */
+/** Read-only state and activation data visible when entering or exiting a typed node. */
 @ActronStoreDsl
-interface MachineEnterScope<C : Any, out A : Action, in CMD : Any, in E : Event> {
-    /** The node being entered. */
-    val node: StateId
+interface StateHookScope<out S : Any, out A : Action, in E : Event> {
+    /** The full state at this point in the decision. Entry sees the destination value. */
+    val state: S
 
-    /** The activation this entry creates; commands registered here belong to it. */
+    /** The node being entered or exited, and the identity of this particular activation. */
+    val node: StateId
     val activation: ActivationId
 
-    /** The input that caused the step. */
+    /** Input and logical clock for this step. Hooks must be deterministic. */
     val input: MachineInput<A>
-
-    /**
-     * The action of the step: the dispatched action or command result, [TimerFired] for a timer,
-     * [CommandFailure] for a failed command, [ChartInitialization] for [MachineInput.Start].
-     */
-    val action: Action
-
-    /** The machine's clock, from the input. */
     val now: MachineTime
 
-    /** The context as updated so far in this step; assign it to update it. */
-    var context: C
+    /** Dispatched action or command result, [TimerFired], [CommandFailure], or [ChartInitialization]. */
+    val action: Action
 
-    /**
-     * Registers a command that runs on its own, cancelled when this activation exits.
-     */
+    /** Deliver the event after the decision commits. */
+    fun event(event: E): EffectId
+}
+
+/** Entry commands belong to the new activation and are cancelled on exit. */
+@ActronStoreDsl
+interface StateEnterScope<out S : Any, out A : Action, in CMD : Any, in E : Event> : StateHookScope<S, A, E> {
     fun command(command: CMD): CommandId
 
-    /**
-     * Registers a command in [lane] under [policy], cancelled when this activation exits.
-     */
     fun command(
         command: CMD,
         lane: LaneId,
         policy: ConcurrencyPolicy,
     ): CommandId
-
-    /**
-     * Asks the executor to deliver [event] after the snapshot is committed.
-     */
-    fun event(event: E): EffectId
 }
 
-/**
- * What an exit hook of a [Machine] sees and may do; pure like [MachineEnterScope].
- */
+/** Explicit-ID charts and typed entry factories can install their own context during entry. */
 @ActronStoreDsl
-interface MachineExitScope<C : Any, out A : Action, in E : Event> {
-    /** The node being exited. */
-    val node: StateId
-
-    /** The activation that ends. */
-    val activation: ActivationId
-
-    /** The input that caused the step. */
-    val input: MachineInput<A>
-
-    /** The action of the step; see [MachineEnterScope.action]. */
-    val action: Action
-
-    /** The machine's clock, from the input. */
-    val now: MachineTime
-
-    /** The context as updated so far in this step; assign it to update it. */
+interface MachineEnterScope<C : Any, out A : Action, in CMD : Any, in E : Event> : StateEnterScope<C, A, CMD, E> {
     var context: C
+    override val state: C get() = context
+}
 
-    /**
-     * Asks the executor to deliver [event] after the snapshot is committed.
-     */
-    fun event(event: E): EffectId
+/** Mutable exit context for explicit-ID charts. */
+@ActronStoreDsl
+interface MachineExitScope<C : Any, out A : Action, in E : Event> : StateHookScope<C, A, E> {
+    var context: C
+    override val state: C get() = context
 }
 
 /**
@@ -321,7 +290,7 @@ fun <C : Any, A : Action, CMD : Any, E : Event> Machine(
  * A [MachineInput.CommandResult] whose command is not registered any more is ignored as stale;
  * that is how a late result of a cancelled load cannot complete a newer one.
  */
-class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
+open class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
     val id: DefinitionId,
     val version: DefinitionVersion,
     val chart: StateChartDefinition,

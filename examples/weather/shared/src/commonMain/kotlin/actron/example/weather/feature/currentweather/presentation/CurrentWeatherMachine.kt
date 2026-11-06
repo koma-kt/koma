@@ -6,7 +6,6 @@ import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.weather.domain.WeatherReading
-import actron.statechart.machine.BehaviorStateBuilder
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
 import actron.statechart.machine.Machine
@@ -17,10 +16,39 @@ import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.seconds
 
 @Serializable
-data class CurrentWeatherState(
-    val city: City,
-    val phase: RequestState<WeatherReading> = RequestState.Ready,
-)
+sealed interface CurrentWeatherState {
+    val city: City
+
+    @Serializable
+    data class Ready(
+        override val city: City,
+    ) : CurrentWeatherState
+
+    @Serializable
+    data class Loading(
+        override val city: City,
+    ) : CurrentWeatherState
+
+    @Serializable
+    data class Success(
+        override val city: City,
+        val reading: WeatherReading,
+    ) : CurrentWeatherState
+
+    @Serializable
+    data class Error(
+        override val city: City,
+        val cause: RequestFailure,
+    ) : CurrentWeatherState
+}
+
+fun CurrentWeatherState.toRequestState(): RequestState<WeatherReading> =
+    when (this) {
+        is CurrentWeatherState.Ready -> RequestState.Ready
+        is CurrentWeatherState.Loading -> RequestState.Loading
+        is CurrentWeatherState.Success -> RequestState.Success(reading)
+        is CurrentWeatherState.Error -> RequestState.Error(cause)
+    }
 
 @Serializable
 sealed interface CurrentWeatherAction : Action {
@@ -45,34 +73,30 @@ object CurrentWeatherMachine {
     fun create(): Machine<CurrentWeatherState, CurrentWeatherAction, LoadCurrentWeather, NoEvent> =
         behaviorStateMachine(
             id = DefinitionId(value = "current-weather"),
-            version = DefinitionVersion(value = "3"),
-            initial = RequestState.Ready,
-            phaseOf = { state: CurrentWeatherState -> state.phase },
+            version = DefinitionVersion(value = "4"),
+            initialType = CurrentWeatherState.Ready::class,
             build = {
-                val refresh: BehaviorStateBuilder<CurrentWeatherState, CurrentWeatherAction, LoadCurrentWeather, NoEvent>.() -> Unit = {
-                    on<CurrentWeatherAction.Refresh> { transitionTo(state = state.copy(phase = RequestState.Loading)) }
-                }
-                state<RequestState.Ready>(build = refresh)
-                state<RequestState.Loading>(build = {
-                    refresh()
+                on<CurrentWeatherAction.Refresh> { target(CurrentWeatherState.Loading(state.city)) }
+                state<CurrentWeatherState.Ready>()
+                state<CurrentWeatherState.Loading>(build = {
                     onEnter {
                         withTimeoutOrNull<Unit>(timeout = 8.seconds) {
                             command(command = LoadCurrentWeather(city = state.city))
                             awaitCancellation()
                         }
-                        transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Timeout)))
+                        target(CurrentWeatherState.Error(state.city, cause = RequestFailure.Timeout))
                     }
                     on<CurrentWeatherAction.Loaded> { action ->
                         if (action.reading.city == state.city) {
-                            transitionTo(state = state.copy(phase = RequestState.Success(value = action.reading)))
+                            target(CurrentWeatherState.Success(state.city, action.reading))
                         }
                     }
                     on<CurrentWeatherAction.Failed> { action ->
-                        transitionTo(state = state.copy(phase = RequestState.Error(cause = RequestFailure.Unavailable(message = action.message))))
+                        target(CurrentWeatherState.Error(state.city, cause = RequestFailure.Unavailable(message = action.message)))
                     }
                 })
-                state<RequestState.Success<WeatherReading>>(build = refresh)
-                state<RequestState.Error>(build = refresh)
+                state<CurrentWeatherState.Success>()
+                state<CurrentWeatherState.Error>()
             },
         )
 }

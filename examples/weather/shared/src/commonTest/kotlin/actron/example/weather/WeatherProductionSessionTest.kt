@@ -4,6 +4,7 @@ import actron.core.InputAttribution
 import actron.example.weather.app.session.WeatherSavedStateCodec
 import actron.example.weather.app.session.WeatherSession
 import actron.example.weather.app.session.searchRestoration
+import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.CitySearchAction
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.statechart.machine.DecisionTraceObserver
@@ -17,7 +18,7 @@ class WeatherProductionSessionTest {
     @Test
     fun currentStateUpdatesWithoutExplainingOrSerializingHistory() {
         val session = WeatherSession()
-        val machine = CitySearchMachine.create()
+        val machine = CitySearchMachine.create(LocalCitySearchRepository)
         val checkpoint = session.searchCheckpoint
         val observer = session.searchRestoration().observers(machine, checkpoint).single()
         assertFalse(observer is DecisionTraceObserver<*, *, *, *>)

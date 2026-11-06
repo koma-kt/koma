@@ -24,18 +24,15 @@ sealed interface WeatherScreenEvent : Event {
 
 /** The screen owns its header and requests updates; it never reads a child's internal state. */
 object CityWeatherMachine {
-    private data object Active
-
     fun create(): Machine<WeatherScreenState, WeatherScreenAction, NoCommand, WeatherScreenEvent> =
         behaviorStateMachine(
             id = DefinitionId(value = "city-weather"),
-            version = DefinitionVersion(value = "10"),
-            initial = Active,
-            phaseOf = { _: WeatherScreenState -> Active },
+            version = DefinitionVersion(value = "11"),
+            initialType = WeatherScreenState::class,
             build = {
-                state<Active>(build = {
+                state<WeatherScreenState>(build = {
                     onEnter(block = { event(event = WeatherScreenEvent.RefreshChildren) })
-                    on<WeatherScreenAction.Refresh> { transitionTo(state = state) }
+                    on<WeatherScreenAction.Refresh> { target(state = state) }
                 })
             },
         )

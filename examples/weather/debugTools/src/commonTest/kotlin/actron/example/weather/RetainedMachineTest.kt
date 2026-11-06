@@ -8,7 +8,6 @@ import actron.example.weather.core.fixtures.demoCities
 import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.cities.presentation.CitySearchState
-import actron.example.weather.feature.cities.presentation.citySearchHandler
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherAction
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
@@ -47,7 +46,7 @@ class RetainedMachineTest {
                 DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper).retainedMachine(
                     key = "weather",
                     machine = CurrentWeatherMachine.create(),
-                    initial = CurrentWeatherState(demoCities.first()),
+                    initial = CurrentWeatherState.Ready(demoCities.first()),
                     handler = handler,
                     coroutineContext = coroutineContext,
                     initialActions = listOf(CurrentWeatherAction.Refresh),
@@ -71,8 +70,8 @@ class RetainedMachineTest {
             val keeper = InstanceKeeperDispatcher()
             val context = DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper)
             val handler = currentWeatherHandler(repository = WeatherRepository { awaitCancellation() })
-            val first = context.retainedMachine("first", CurrentWeatherMachine.create(), CurrentWeatherState(demoCities[0]), handler, coroutineContext = coroutineContext)
-            val second = context.retainedMachine("second", CurrentWeatherMachine.create(), CurrentWeatherState(demoCities[1]), handler, coroutineContext = coroutineContext)
+            val first = context.retainedMachine("first", CurrentWeatherMachine.create(), CurrentWeatherState.Ready(demoCities[0]), handler, coroutineContext = coroutineContext)
+            val second = context.retainedMachine("second", CurrentWeatherMachine.create(), CurrentWeatherState.Ready(demoCities[1]), handler, coroutineContext = coroutineContext)
             testScheduler.runCurrent()
             assertNotSame(first, second)
             assertEquals(demoCities[0], first.state.value.context.city)
@@ -89,9 +88,8 @@ class RetainedMachineTest {
             fun create() =
                 DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper).retainedMachine(
                     key = "search",
-                    machine = CitySearchMachine.create(),
-                    initial = CitySearchState(),
-                    handler = citySearchHandler(LocalCitySearchRepository),
+                    machine = CitySearchMachine.create(LocalCitySearchRepository),
+                    initial = CitySearchState.Idle(),
                     restoration = history.session.searchRestoration(),
                     recording = history.recording(),
                     coroutineContext = coroutineContext,
