@@ -17,6 +17,8 @@ import actron.timetravel.*
 import actron.timetravel.compose.HistoryGraph
 import actron.timetravel.compose.HistoryGraphCoverage
 import actron.timetravel.compose.HistoryPanelState
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Immutable diagnostic projection; application checkpoints remain owned by WeatherSession. */
@@ -31,15 +33,17 @@ class WeatherHistory(
     val exportSettings: HistoryExportSettings = HistoryExportSettings("Weather"),
     val session: WeatherSession = WeatherSession(),
 ) : com.arkivanov.essenty.instancekeeper.InstanceKeeper.Instance {
+    private val lock = SynchronizedObject()
     private var coverage: Map<DefinitionId, TransitionCoverage> = emptyMap()
 
-    fun snapshot(): WeatherHistoryFrame = WeatherHistoryFrame(session.frame, coverage)
+    fun snapshot(): WeatherHistoryFrame = synchronized(lock) { WeatherHistoryFrame(session.frame, coverage) }
 
-    fun restoreDiagnostics(snapshot: WeatherHistoryFrame): WeatherFrame {
-        require(snapshot.application.canResume())
-        coverage = snapshot.coverage
-        return snapshot.application
-    }
+    fun beginBranch(snapshot: WeatherHistoryFrame): WeatherFrame =
+        synchronized(lock) {
+            session.beginBranch(snapshot.application)
+            coverage = snapshot.coverage
+            snapshot.application
+        }
 
     val timeline = HistoryTimeline<WeatherHistoryFrame>(capacity)
     val panel = HistoryPanelState<WeatherHistoryFrame>()
@@ -142,7 +146,7 @@ class WeatherHistory(
             private fun committed() {
                 val append = pending
                 pending = {}
-                append()
+                synchronized(lock) { append() }
             }
 
             override fun onCommitted(

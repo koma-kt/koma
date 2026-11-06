@@ -42,13 +42,14 @@ class DefaultWeatherRootComponent(
     api: WeatherRepository,
     citySearch: CitySearchRepository,
     hourlyApi: HourlyForecastRepository,
-    coroutineContext: CoroutineContext = Dispatchers.Main,
+    uiContext: CoroutineContext = Dispatchers.Main,
+    machineContext: CoroutineContext = Dispatchers.Default.limitedParallelism(1),
     private val session: WeatherSession = retainedWeatherSession(componentContext),
-    private val searchFactory: CitySearchComponent.Factory = DefaultCitySearchComponentFactory(citySearch, coroutineContext, session),
-    private val weatherFactory: CityWeatherComponent.Factory = DefaultCityWeatherComponentFactory(api, hourlyApi, coroutineContext, session),
+    private val searchFactory: CitySearchComponent.Factory = DefaultCitySearchComponentFactory(citySearch, uiContext, machineContext, session),
+    private val weatherFactory: CityWeatherComponent.Factory = DefaultCityWeatherComponentFactory(api, hourlyApi, uiContext, machineContext, session),
 ) : WeatherRootComponent,
     ComponentContext by componentContext {
-    private val scope = CoroutineScope(coroutineContext + SupervisorJob())
+    private val scope = CoroutineScope(uiContext + SupervisorJob())
 
     private val searchBridge = ParentBridge<Nothing, CitySearchComponent.News>()
     private val weatherBridge = ParentBridge<Nothing, CityWeatherComponent.News>()
@@ -107,9 +108,8 @@ class DefaultWeatherRootComponent(
             is ChildConfiguration.Weather -> weatherFactory.create(context, configuration.city, weatherBridge.endpoint)
         }
 
-    fun continueFrom(frame: WeatherFrame) {
+    fun showBranch(frame: WeatherFrame) {
         // New branch keys replace retained children; their MachineInstances resume saved checkpoints.
-        session.beginBranch(frame)
         when (val route = frame.route) {
             WeatherRoute.Search -> navigation.replaceAll(ChildConfiguration.Search(session.branch))
             is WeatherRoute.Weather -> navigation.replaceAll(ChildConfiguration.Search(session.branch), ChildConfiguration.Weather(route.checkpoint.screen.snapshot.context.city, session.branch))

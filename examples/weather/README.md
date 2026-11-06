@@ -260,13 +260,10 @@ that the running app has not loaded yet. Normal exit removes the snapshot.
 
 ## MVI execution
 
-The root uses `Dispatchers.Main` for machine processing and Decompose navigation. Search and
-weather use typed `commandHandler` / `commandHandlers` to call domain services and return actions;
-they never write state. Each machine commits decisions sequentially. Both screens collect
-with `collectAsUiState`, explicitly separating UI collection from the machine dispatcher.
-The shared history adapter is UI-confined together with navigation. See the
-[library's threading and command contract](../../doc/guides/machine-mvi.md) before configuring
-a background processor in a different host.
+The root gives its stores a shared sequential dispatcher on `Dispatchers.Default` and runs navigation on
+`Dispatchers.Main`. Supply `machineContext` and `uiContext` at root creation to override these defaults.
+Search calls the repository directly in its cancellable Loading entry. Both screens collect state
+on Main with `collectAsUiState`. See the [threading contract](../../doc/guides/machine-mvi.md).
 
 ## Share a view-only recording
 

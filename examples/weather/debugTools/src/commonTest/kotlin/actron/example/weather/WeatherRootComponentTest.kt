@@ -26,6 +26,44 @@ import kotlin.test.assertTrue
 
 class WeatherRootComponentTest {
     @Test
+    fun searchEntryUsesMachineContext() =
+        runTest {
+            val keeper = InstanceKeeperDispatcher()
+            val lifecycle = LifecycleRegistry()
+            val entryContext = kotlinx.coroutines.CompletableDeferred<String>()
+            val root =
+                DebugWeatherRootComponent(
+                    DefaultComponentContext(lifecycle, instanceKeeper = keeper),
+                    SampleWeatherRepository,
+                    {
+                        entryContext.complete(
+                            kotlinx.coroutines
+                                .currentCoroutineContext()[kotlinx.coroutines.CoroutineName]
+                                ?.name
+                                .orEmpty(),
+                        )
+                        emptyList()
+                    },
+                    SampleHourlyRepository,
+                    uiContext = coroutineContext + kotlinx.coroutines.CoroutineName("ui"),
+                    machineContext = coroutineContext + kotlinx.coroutines.CoroutineName("machine"),
+                )
+            lifecycle.resume()
+            try {
+                testScheduler.runCurrent()
+                val search =
+                    root
+                        .getChildStack()
+                        .value.active.instance as CitySearchComponent
+                search.onUiEvent(CitySearchIntent.QueryChanged("Paris"))
+                assertEquals("machine", entryContext.await())
+            } finally {
+                lifecycle.destroy()
+                keeper.destroy()
+            }
+        }
+
+    @Test
     fun continueFromWeatherRestartsOnlyPendingRegionAndRestoresSearchBackStack() =
         runTest {
             var currentCalls = 0
@@ -45,7 +83,8 @@ class WeatherRootComponentTest {
                         hourlyCalls++
                         awaitCancellation()
                     },
-                    coroutineContext,
+                    uiContext = coroutineContext,
+                    machineContext = coroutineContext,
                 )
             lifecycle.resume()
             try {
@@ -146,7 +185,8 @@ class WeatherRootComponentTest {
                     api,
                     LocalCitySearchRepository,
                     SampleHourlyRepository,
-                    coroutineContext,
+                    uiContext = coroutineContext,
+                    machineContext = coroutineContext,
                 )
             val history = keeper.getOrCreate<WeatherHistory>(key = "weather-debug-history") { error("Root must install history before creating children") }
             firstLifecycle.resume()
@@ -187,7 +227,8 @@ class WeatherRootComponentTest {
                     api,
                     LocalCitySearchRepository,
                     SampleHourlyRepository,
-                    coroutineContext,
+                    uiContext = coroutineContext,
+                    machineContext = coroutineContext,
                 )
             lifecycle.resume()
             assertSame(history, keeper.getOrCreate<WeatherHistory>(key = "weather-debug-history") { error("History must survive recreation") })
@@ -244,7 +285,8 @@ class WeatherRootComponentTest {
                     SampleWeatherRepository,
                     LocalCitySearchRepository,
                     SampleHourlyRepository,
-                    coroutineContext,
+                    uiContext = coroutineContext,
+                    machineContext = coroutineContext,
                 )
             lifecycle.resume()
             try {
@@ -293,7 +335,8 @@ class WeatherRootComponentTest {
                         SampleWeatherRepository,
                         LocalCitySearchRepository,
                         SampleHourlyRepository,
-                        coroutineContext,
+                        uiContext = coroutineContext,
+                        machineContext = coroutineContext,
                     )
                 recreatedLifecycle.resume()
                 testScheduler.runCurrent()
@@ -333,7 +376,8 @@ class WeatherRootComponentTest {
                     api,
                     LocalCitySearchRepository,
                     SampleHourlyRepository,
-                    coroutineContext,
+                    uiContext = coroutineContext,
+                    machineContext = coroutineContext,
                 )
             lifecycle.resume()
             try {
@@ -379,7 +423,8 @@ class WeatherRootComponentTest {
                             cancelled++
                         }
                     },
-                    coroutineContext,
+                    uiContext = coroutineContext,
+                    machineContext = coroutineContext,
                 )
             lifecycle.resume()
             try {

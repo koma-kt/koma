@@ -25,7 +25,8 @@ import kotlin.coroutines.CoroutineContext
 /** Application composition connects feature stores to current checkpoints and optional recording. */
 class DefaultCitySearchComponentFactory(
     private val repository: CitySearchRepository,
-    private val coroutineContext: CoroutineContext,
+    private val uiContext: CoroutineContext,
+    private val machineContext: CoroutineContext,
     private val session: WeatherSession,
     private val settingsAction: @androidx.compose.runtime.Composable () -> Unit = {},
     private val recording: MachineRecording<CitySearchState, CitySearchAction, Unit, NoEvent> = MachineRecording { _, _, handler -> MachineDiagnostics(handler) },
@@ -41,16 +42,17 @@ class DefaultCitySearchComponentFactory(
                 initial = CitySearchState.Idle(),
                 restoration = session.searchRestoration(),
                 recording = recording,
-                coroutineContext = coroutineContext,
+                coroutineContext = machineContext,
             )
-        return DefaultCitySearchComponent(componentContext, endpoint, coroutineContext, store, settingsAction)
+        return DefaultCitySearchComponent(componentContext, endpoint, uiContext, store, settingsAction)
     }
 }
 
 class DefaultCityWeatherComponentFactory(
     private val repository: WeatherRepository,
     private val hourlyRepository: HourlyForecastRepository,
-    private val coroutineContext: CoroutineContext,
+    private val uiContext: CoroutineContext,
+    private val machineContext: CoroutineContext,
     private val session: WeatherSession,
     private val recordings: WeatherMachineRecordings = WeatherMachineRecordings(),
 ) : CityWeatherComponent.Factory {
@@ -66,10 +68,10 @@ class DefaultCityWeatherComponentFactory(
                     initial = session.weatherCheckpoint(city = city),
                     currentRepository = repository,
                     hourlyRepository = hourlyRepository,
-                    coroutineContext = coroutineContext,
+                    coroutineContext = machineContext,
                     recordings = recordings,
                 ).also { it.start() }
             }
-        return DefaultCityWeatherComponent(componentContext = componentContext, endpoint = endpoint, coroutineContext = coroutineContext, machines = machines)
+        return DefaultCityWeatherComponent(componentContext = componentContext, endpoint = endpoint, coroutineContext = uiContext, machines = machines)
     }
 }

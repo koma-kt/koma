@@ -29,7 +29,8 @@ class DebugWeatherRootComponent(
     api: WeatherRepository,
     citySearch: CitySearchRepository,
     hourlyApi: HourlyForecastRepository,
-    coroutineContext: CoroutineContext = Dispatchers.Main,
+    uiContext: CoroutineContext = Dispatchers.Main,
+    machineContext: CoroutineContext = Dispatchers.Default.limitedParallelism(1),
     configuration: HistoryConfiguration = HistoryConfiguration(),
     history: WeatherHistory = retainedWeatherHistory(componentContext, configuration),
 ) : WeatherRootComponent {
@@ -41,15 +42,16 @@ class DebugWeatherRootComponent(
             api,
             citySearch,
             hourlyApi,
-            coroutineContext,
+            uiContext,
+            machineContext,
             session = history.session,
-            searchFactory = DefaultCitySearchComponentFactory(citySearch, coroutineContext, history.session, { WeatherSettingsButton(settings::open) }, history.recording()),
-            weatherFactory = DefaultCityWeatherComponentFactory(api, hourlyApi, coroutineContext, history.session, history.weatherRecordings()),
+            searchFactory = DefaultCitySearchComponentFactory(citySearch, uiContext, machineContext, history.session, { WeatherSettingsButton(settings::open) }, history.recording()),
+            weatherFactory = DefaultCityWeatherComponentFactory(api, hourlyApi, uiContext, machineContext, history.session, history.weatherRecordings()),
         )
 
     override fun getChildStack() = root.getChildStack()
 
-    fun continueFrom(frame: WeatherHistoryFrame) = root.continueFrom(history.restoreDiagnostics(frame))
+    fun continueFrom(frame: WeatherHistoryFrame) = root.showBranch(history.beginBranch(frame))
 
     @Composable
     override fun Render() {
