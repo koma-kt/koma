@@ -30,7 +30,8 @@ For search, the concrete chain is:
 4. The Loading entry calls `repository.search` and dispatches `Found` or `Failed` through the queue.
 5. Compose renders the current `CitySearchState` from the collected snapshot.
 
-The root supplies `Dispatchers.Main` for this example. Suspending search runs in the entry coroutine;
+The root runs stores and their entry coroutines on `Dispatchers.Default`. Navigation and UI collection run on Main.
+The host can override `machineContext` and `uiContext` independently. Suspending search runs in the entry coroutine;
 reducers and guards must remain quick and deterministic. Configuring a different processor does
 not make synchronous blocking work in a reducer appropriate. See the library's
 [threading contract](../../../doc/guides/machine-mvi.md) for dispatcher and UI-collection details.

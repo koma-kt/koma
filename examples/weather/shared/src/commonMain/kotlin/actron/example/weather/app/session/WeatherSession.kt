@@ -18,6 +18,8 @@ import actron.statechart.machine.MachineTime
 import actron.timetravel.RecordedStep
 import actron.timetravel.carriedPast
 import com.arkivanov.essenty.instancekeeper.InstanceKeeper
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 
 sealed interface WeatherRoute {
     data object Search : WeatherRoute
@@ -55,29 +57,32 @@ class WeatherSession(
     initialBranch: Long = 0,
     private val clockFactory: () -> MachineClock = { MachineClock.monotonic() },
 ) : InstanceKeeper.Instance {
-    var clock: MachineClock = MachineClock.monotonic()
-        private set
-    var frame = initialFrame
-        private set
-    var branch = initialBranch
-        private set
+    private val lock = SynchronizedObject()
+    private var currentClock = weatherClock(initialFrame, clockFactory)
+    private var currentFrame = initialFrame
+    private var weatherVisit = 0L
+    private var currentBranch = initialBranch
     private var resumableFrame = initialFrame
+
+    val clock get() = synchronized(lock) { currentClock }
+    val frame get() = synchronized(lock) { currentFrame }
+    val branch get() = synchronized(lock) { currentBranch }
 
     init {
         require(initialFrame.canResume())
-        clock = weatherClock(initialFrame, clockFactory)
     }
 
     /** Pause logical time while the process is absent, preserving remaining timer delays. */
-    fun persistenceFrame(): WeatherFrame = resumableFrame.at(clock.now())
+    fun persistenceFrame(): WeatherFrame = synchronized(lock) { resumableFrame.at(currentClock.now()) }
 
-    fun beginBranch(snapshot: WeatherFrame) {
-        require(snapshot.canResume())
-        branch++
-        frame = snapshot
-        resumableFrame = snapshot
-        clock = weatherClock(snapshot, clockFactory)
-    }
+    fun beginBranch(snapshot: WeatherFrame) =
+        synchronized(lock) {
+            require(snapshot.canResume())
+            currentBranch++
+            currentFrame = snapshot
+            resumableFrame = snapshot
+            currentClock = weatherClock(snapshot, clockFactory)
+        }
 
     val searchCheckpoint get() = frame.search
 
@@ -88,44 +93,51 @@ class WeatherSession(
         }
 
     internal fun updateSearch(checkpoint: ExecutorCheckpoint<CitySearchState, Unit>) {
-        frame = frame.copy(search = checkpoint)
+        currentFrame = currentFrame.copy(search = checkpoint)
     }
 
     internal fun updateWeather(checkpoint: WeatherCheckpoints) {
-        frame = frame.copy(route = WeatherRoute.Weather(checkpoint))
+        currentFrame = currentFrame.copy(route = WeatherRoute.Weather(checkpoint))
     }
 
     internal fun updateWeatherPending(messages: List<actron.statechart.machine.BridgeMessage>) {
         val route = frame.route
-        if (route is WeatherRoute.Weather) frame = frame.copy(route = route.copy(checkpoint = route.checkpoint.copy(inFlight = messages)))
+        if (route is WeatherRoute.Weather) currentFrame = currentFrame.copy(route = route.copy(checkpoint = route.checkpoint.copy(inFlight = messages)))
     }
 
-    fun openCity(city: City) {
-        frame = frame.copy(route = WeatherRoute.Weather(freshWeather(city))).at(clock.now())
-        if (frame.canResume()) resumableFrame = frame
-    }
+    fun openCity(city: City) =
+        synchronized(lock) {
+            weatherVisit++
+            currentFrame = currentFrame.copy(route = WeatherRoute.Weather(freshWeather(city))).at(clock.now())
+            if (currentFrame.canResume()) resumableFrame = currentFrame
+        }
 
-    fun back() {
-        frame = frame.copy(route = WeatherRoute.Search).at(clock.now())
-        if (frame.canResume()) resumableFrame = frame
-    }
+    fun back() =
+        synchronized(lock) {
+            weatherVisit++
+            currentFrame = currentFrame.copy(route = WeatherRoute.Search).at(clock.now())
+            if (currentFrame.canResume()) resumableFrame = currentFrame
+        }
 
     internal fun <C : Any, A : Action, CMD : Any, E : Event> observe(
         checkpoint: ExecutorCheckpoint<C, CMD>,
         update: (ExecutorCheckpoint<C, CMD>) -> Unit,
+        followsWeatherVisit: Boolean = false,
         afterUpdate: (RecordedStep<C, A, CMD, E>) -> Unit = {},
     ): DecisionObserver<C, A, CMD, E> {
         val generation = branch
+        val visit = synchronized(lock) { weatherVisit }
         var current = checkpoint
         return object : DecisionObserver<C, A, CMD, E> {
-            private fun apply(step: RecordedStep<C, A, CMD, E>) {
-                if (generation != branch) return
-                current = current.carriedPast(step)
-                update(current)
-                afterUpdate(step)
-                frame = frame.at(current.now)
-                if (frame.canResume()) resumableFrame = frame
-            }
+            private fun apply(step: RecordedStep<C, A, CMD, E>) =
+                synchronized(lock) {
+                    if (generation != currentBranch || (followsWeatherVisit && visit != weatherVisit)) return@synchronized
+                    current = current.carriedPast(step)
+                    update(current)
+                    afterUpdate(step)
+                    currentFrame = currentFrame.at(current.now)
+                    if (currentFrame.canResume()) resumableFrame = currentFrame
+                }
 
             override fun onCommitted(
                 input: InputAttribution,

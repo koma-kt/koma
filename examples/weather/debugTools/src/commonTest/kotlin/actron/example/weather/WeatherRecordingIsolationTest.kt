@@ -41,7 +41,8 @@ class WeatherRecordingIsolationTest {
                         weatherCalls++
                         awaitCancellation()
                     },
-                    coroutineContext,
+                    uiContext = coroutineContext,
+                    machineContext = coroutineContext,
                     history = history,
                 )
             lifecycle.resume()

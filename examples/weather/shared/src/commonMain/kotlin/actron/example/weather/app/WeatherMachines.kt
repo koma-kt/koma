@@ -133,7 +133,7 @@ class WeatherMachines(
     ): MachineStore<C, A, CMD, E> =
         runCatching {
             val setup = recording.prepare(machine = machine, checkpoint = checkpoint, handler = handler)
-            val observers = listOf(member, session.observe(checkpoint = checkpoint, update = update, afterUpdate = { step -> session.updateWeatherPending(messages = pending(step)) })) + setup.observers
+            val observers = listOf(member, session.observe(checkpoint = checkpoint, update = update, followsWeatherVisit = true, afterUpdate = { step -> session.updateWeatherPending(messages = pending(step)) })) + setup.observers
             val store =
                 if (checkpoint.snapshot.isStarted) {
                     resumeMachineStore(machine = machine, checkpoint = checkpoint, handler = setup.handler, scope = scope, coroutineContext = coroutineContext, clock = session.clock, observers = observers, builder = setup.configure)

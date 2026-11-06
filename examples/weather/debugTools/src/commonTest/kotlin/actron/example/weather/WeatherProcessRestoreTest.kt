@@ -50,7 +50,8 @@ class WeatherProcessRestoreTest {
                     current,
                     LocalCitySearchRepository,
                     forecast,
-                    coroutineContext,
+                    uiContext = coroutineContext,
+                    machineContext = coroutineContext,
                 )
             var root = create()
             lifecycle.resume()
@@ -146,7 +147,7 @@ class WeatherProcessRestoreTest {
             val keeper = InstanceKeeperDispatcher()
             val lifecycle = LifecycleRegistry()
             val state = StateKeeperDispatcher()
-            val root = DebugWeatherRootComponent(DefaultComponentContext(lifecycle, instanceKeeper = keeper, stateKeeper = state), current, LocalCitySearchRepository, forecast, coroutineContext)
+            val root = DebugWeatherRootComponent(DefaultComponentContext(lifecycle, instanceKeeper = keeper, stateKeeper = state), current, LocalCitySearchRepository, forecast, uiContext = coroutineContext, machineContext = coroutineContext)
             lifecycle.resume()
             testScheduler.runCurrent()
             assertIs<CitySearchComponent>(
@@ -172,7 +173,7 @@ class WeatherProcessRestoreTest {
             testScheduler.runCurrent()
             val newKeeper = InstanceKeeperDispatcher()
             val newLifecycle = LifecycleRegistry()
-            val restored = DebugWeatherRootComponent(DefaultComponentContext(newLifecycle, instanceKeeper = newKeeper, stateKeeper = StateKeeperDispatcher(Json.decodeFromString(SerializableContainer.serializer(), bytes))), current, LocalCitySearchRepository, forecast, coroutineContext)
+            val restored = DebugWeatherRootComponent(DefaultComponentContext(newLifecycle, instanceKeeper = newKeeper, stateKeeper = StateKeeperDispatcher(Json.decodeFromString(SerializableContainer.serializer(), bytes))), current, LocalCitySearchRepository, forecast, uiContext = coroutineContext, machineContext = coroutineContext)
             newLifecycle.resume()
             testScheduler.runCurrent()
             assertEquals(

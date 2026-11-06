@@ -49,6 +49,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(libs.coroutines.core)
+            implementation("org.jetbrains.kotlinx:atomicfu:0.28.0")
             implementation(libs.serialization.json)
         }
         commonTest.dependencies {

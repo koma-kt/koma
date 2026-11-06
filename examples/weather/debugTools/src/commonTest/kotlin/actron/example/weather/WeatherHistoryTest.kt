@@ -124,7 +124,7 @@ class WeatherHistoryTest {
                     .hits.values
                     .sum(),
         )
-        history.session.beginBranch(history.restoreDiagnostics(selected.snapshot))
+        history.beginBranch(selected.snapshot)
         traceEdits(history, listOf("Paris"))
         assertEquals(
             expected = 6L,
