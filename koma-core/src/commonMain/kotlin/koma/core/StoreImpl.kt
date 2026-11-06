@@ -10,6 +10,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -24,6 +26,11 @@ import kotlin.concurrent.Volatile
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.reflect.KClass
+
+// Internal bridge for handlers that StoreBuilder runs with a dispatcher override.
+internal interface HandlerContextScope {
+    var handlerContext: CoroutineContext?
+}
 
 @OptIn(InternalKomaApi::class)
 internal abstract class StoreImpl<S : State, A : Action, E : Event> : Store<S, A, E>, StoreInternalApi<S, A, E> {
@@ -355,46 +362,47 @@ internal abstract class StoreImpl<S : State, A : Action, E : Event> : Store<S, A
 
     private suspend fun processActionDispatch(state: S, action: A): S {
         processPlugins { onAction(pluginScope, state, action) }
-        var newState: S? = null
-        onAction.invoke(
-            object : ActionScope<S, A, E, S> {
-                override val state = state
-                override val action = action
-                override fun nextState(block: () -> S) {
-                    newState = block()
-                }
+        return executeStateHandler(state) { transition ->
+            onAction.invoke(
+                object : ActionScope<S, A, E, S>, HandlerContextScope by transition {
+                    override val state = state
+                    override val action = action
+                    override fun nextState(block: () -> S): Nothing = transition.nextState(block)
 
-                override fun clearPendingActions() {
-                    clearPendingDispatchJobs()
-                }
+                    override fun clearPendingActions() {
+                        transition.ensureActive()
+                        clearPendingDispatchJobs()
+                    }
 
-                override suspend fun event(event: E) {
-                    emit(event)
-                }
+                    override suspend fun event(event: E) {
+                        emit(event)
+                    }
 
-                override fun cancelLaunch(lane: LaunchLane) {
-                    val stateRuntime = stateRuntimes[state::class] ?: throw InternalError(IllegalStateException("[Koma] State scope is not found"))
-                    cancelTrackedActionLaunch(stateRuntime, lane)
-                }
+                    override fun cancelLaunch(lane: LaunchLane) {
+                        transition.ensureActive()
+                        val stateRuntime = stateRuntimes[state::class] ?: throw InternalError(IllegalStateException("[Koma] State scope is not found"))
+                        cancelTrackedActionLaunch(stateRuntime, lane)
+                    }
 
-                override fun launch(
-                    dispatcher: CoroutineDispatcher?,
-                    control: LaunchControl,
-                    block: suspend ActionLaunchScope<S, A, E, S>.() -> Unit,
-                ) {
-                    val stateRuntime = stateRuntimes[state::class] ?: throw InternalError(IllegalStateException("[Koma] State scope is not found"))
-                    launchActionInStateRuntime(
-                        stateRuntime = stateRuntime,
-                        action = action,
-                        control = control,
-                        dispatcher = dispatcher,
-                        buildLaunchScope = { buildActionLaunchScope(stateRuntime.scope, action) },
-                        block = block,
-                    )
-                }
-            },
-        )
-        return newState ?: state
+                    override fun launch(
+                        dispatcher: CoroutineDispatcher?,
+                        control: LaunchControl,
+                        block: suspend ActionLaunchScope<S, A, E, S>.() -> Unit,
+                    ) {
+                        transition.ensureActive()
+                        val stateRuntime = stateRuntimes[state::class] ?: throw InternalError(IllegalStateException("[Koma] State scope is not found"))
+                        launchActionInStateRuntime(
+                            stateRuntime = stateRuntime,
+                            action = action,
+                            control = control,
+                            dispatcher = dispatcher,
+                            buildLaunchScope = { buildActionLaunchScope(stateRuntime.scope, action) },
+                            block = block,
+                        )
+                    }
+                },
+            )
+        }
     }
 
     private suspend fun processStateEnter(state: S): S {
@@ -403,33 +411,33 @@ internal abstract class StoreImpl<S : State, A : Action, E : Event> : Store<S, A
             scope = CoroutineScope(coroutineScope.coroutineContext + SupervisorJob(coroutineScope.coroutineContext[Job])),
         )
         stateRuntimes[state::class] = stateRuntime
-        var newState: S? = null
-        onEnter.invoke(
-            object : EnterScope<S, E, S> {
-                override val state = state
-                override fun nextState(block: () -> S) {
-                    newState = block()
-                }
+        return executeStateHandler(state) { transition ->
+            onEnter.invoke(
+                object : EnterScope<S, E, S>, HandlerContextScope by transition {
+                    override val state = state
+                    override fun nextState(block: () -> S): Nothing = transition.nextState(block)
 
-                override fun clearPendingActions() {
-                    clearPendingDispatchJobs()
-                }
+                    override fun clearPendingActions() {
+                        transition.ensureActive()
+                        clearPendingDispatchJobs()
+                    }
 
-                override suspend fun event(event: E) {
-                    emit(event)
-                }
+                    override suspend fun event(event: E) {
+                        emit(event)
+                    }
 
-                override fun launch(dispatcher: CoroutineDispatcher?, block: suspend EnterLaunchScope<S, E, S>.() -> Unit) {
-                    launchInStateRuntime(
-                        stateRuntime = stateRuntime,
-                        dispatcher = dispatcher,
-                        buildLaunchScope = { buildEnterLaunchScope(stateRuntime.scope) },
-                        block = block,
-                    )
-                }
-            },
-        )
-        return newState ?: state
+                    override fun launch(dispatcher: CoroutineDispatcher?, block: suspend EnterLaunchScope<S, E, S>.() -> Unit) {
+                        transition.ensureActive()
+                        launchInStateRuntime(
+                            stateRuntime = stateRuntime,
+                            dispatcher = dispatcher,
+                            buildLaunchScope = { buildEnterLaunchScope(stateRuntime.scope) },
+                            block = block,
+                        )
+                    }
+                },
+            )
+        }
     }
 
     private fun <LS> launchInStateRuntime(
@@ -532,33 +540,35 @@ internal abstract class StoreImpl<S : State, A : Action, E : Event> : Store<S, A
             }
 
             override suspend fun transaction(dispatcher: CoroutineDispatcher?, block: suspend EnterTransactionScope<S, E, S>.() -> Unit) {
+                val callerContext = currentCoroutineContext()
+                ensureStoreActive(callerContext)
                 val job = coroutineScope.launch(dispatcher ?: EmptyCoroutineContext) {
                     mutex.withLock {
                         if (stateScope.isActive) {
-                            var newState: S? = null
-                            val transactionScope = object : EnterTransactionScope<S, E, S> {
-                                override val state: S = currentState
+                            val nextState = try {
+                                executeStateHandler(currentState, callerContext) { transition ->
+                                    val transactionScope = object : EnterTransactionScope<S, E, S> {
+                                        override val state: S = currentState
 
-                                override fun nextState(block: () -> S) {
-                                    newState = block()
-                                }
+                                        override fun nextState(block: () -> S): Nothing = transition.nextState(block)
 
-                                override fun clearPendingActions() {
-                                    clearPendingDispatchJobs()
-                                }
+                                        override fun clearPendingActions() {
+                                            transition.ensureActive()
+                                            clearPendingDispatchJobs()
+                                        }
 
-                                override suspend fun event(event: E) {
-                                    emit(event)
+                                        override suspend fun event(event: E) {
+                                            callerContext.ensureActive()
+                                            emit(event)
+                                        }
+                                    }
+                                    block(transactionScope)
                                 }
-                            }
-                            try {
-                                block(transactionScope)
                             } catch (t: Throwable) {
                                 rethrowIfNonRecoverable(t)
                                 onErrorOccurred(currentState, t as Exception)
                                 return@withLock
                             }
-                            val nextState = newState ?: currentState
                             if (nextState != currentState) {
                                 onStateChanged(currentState, nextState)
                             }
@@ -580,34 +590,36 @@ internal abstract class StoreImpl<S : State, A : Action, E : Event> : Store<S, A
             }
 
             override suspend fun transaction(dispatcher: CoroutineDispatcher?, block: suspend ActionTransactionScope<S, A, E, S>.() -> Unit) {
+                val callerContext = currentCoroutineContext()
+                ensureStoreActive(callerContext)
                 val job = coroutineScope.launch(dispatcher ?: EmptyCoroutineContext) {
                     mutex.withLock {
                         if (stateScope.isActive) {
-                            var newState: S? = null
-                            val transactionScope = object : ActionTransactionScope<S, A, E, S> {
-                                override val state: S = currentState
-                                override val action: A = launchedAction
+                            val nextState = try {
+                                executeStateHandler(currentState, callerContext) { transition ->
+                                    val transactionScope = object : ActionTransactionScope<S, A, E, S> {
+                                        override val state: S = currentState
+                                        override val action: A = launchedAction
 
-                                override fun nextState(block: () -> S) {
-                                    newState = block()
-                                }
+                                        override fun nextState(block: () -> S): Nothing = transition.nextState(block)
 
-                                override fun clearPendingActions() {
-                                    clearPendingDispatchJobs()
-                                }
+                                        override fun clearPendingActions() {
+                                            transition.ensureActive()
+                                            clearPendingDispatchJobs()
+                                        }
 
-                                override suspend fun event(event: E) {
-                                    emit(event)
+                                        override suspend fun event(event: E) {
+                                            callerContext.ensureActive()
+                                            emit(event)
+                                        }
+                                    }
+                                    block(transactionScope)
                                 }
-                            }
-                            try {
-                                block(transactionScope)
                             } catch (t: Throwable) {
                                 rethrowIfNonRecoverable(t)
                                 onErrorOccurred(currentState, t as Exception)
                                 return@withLock
                             }
-                            val nextState = newState ?: currentState
                             if (nextState != currentState) {
                                 onStateChanged(currentState, nextState)
                             }
@@ -620,12 +632,14 @@ internal abstract class StoreImpl<S : State, A : Action, E : Event> : Store<S, A
     }
 
     private suspend fun processStateExit(state: S) {
+        val operation = OperationGuard(currentCoroutineContext())
         try {
             onExit.invoke(
-                object : ExitScope<S, E, S> {
+                object : ExitScope<S, E, S>, HandlerContextScope by operation {
                     override val state = state
 
                     override fun clearPendingActions() {
+                        operation.ensureActive()
                         clearPendingDispatchJobs()
                     }
 
@@ -641,6 +655,7 @@ internal abstract class StoreImpl<S : State, A : Action, E : Event> : Store<S, A
     }
 
     private suspend fun processStateChange(state: S, nextState: S) {
+        ensureStoreActive(currentCoroutineContext())
         _state.update { nextState }
         try {
             stateSaver.save(nextState)
@@ -652,28 +667,28 @@ internal abstract class StoreImpl<S : State, A : Action, E : Event> : Store<S, A
     }
 
     private suspend fun processError(state: S, throwable: Exception): S {
-        var newState: S? = null
-        onError.invoke(
-            object : RecoverScope<S, E, S, Exception> {
-                override val state = state
-                override val error = throwable
-                override fun nextState(block: () -> S) {
-                    newState = block()
-                }
+        return executeStateHandler(state) { transition ->
+            onError.invoke(
+                object : RecoverScope<S, E, S, Exception>, HandlerContextScope by transition {
+                    override val state = state
+                    override val error = throwable
+                    override fun nextState(block: () -> S): Nothing = transition.nextState(block)
 
-                override fun clearPendingActions() {
-                    clearPendingDispatchJobs()
-                }
+                    override fun clearPendingActions() {
+                        transition.ensureActive()
+                        clearPendingDispatchJobs()
+                    }
 
-                override suspend fun event(event: E) {
-                    emit(event)
-                }
-            },
-        )
-        return newState ?: state
+                    override suspend fun event(event: E) {
+                        emit(event)
+                    }
+                },
+            )
+        }
     }
 
     private suspend fun processEventEmit(state: S, event: E) {
+        ensureStoreActive(currentCoroutineContext())
         _event.emit(event)
         processPlugins { onEvent(pluginScope, state, event) }
     }
@@ -709,6 +724,57 @@ internal abstract class StoreImpl<S : State, A : Action, E : Event> : Store<S, A
             rethrowIfNonRecoverable(t)
             throw InternalError(t)
         }
+    }
+
+    private fun ensureStoreActive(executionContext: CoroutineContext) {
+        coroutineScope.coroutineContext.ensureActive()
+        executionContext.ensureActive()
+    }
+
+    // The signal belongs to one invocation, so nested handlers cannot consume each other's exit.
+    private class NextStateRequested(val owner: Any) : Throwable()
+
+    private open inner class OperationGuard(
+        private val executionContext: CoroutineContext,
+        private val callerContext: CoroutineContext? = null,
+    ) : HandlerContextScope {
+        override var handlerContext: CoroutineContext? = null
+
+        fun ensureActive() {
+            ensureStoreActive(executionContext)
+            callerContext?.ensureActive()
+            handlerContext?.ensureActive()
+        }
+    }
+
+    private inner class StateTransition(
+        executionContext: CoroutineContext,
+        callerContext: CoroutineContext?,
+    ) : OperationGuard(executionContext, callerContext) {
+        var nextState: S? = null
+            private set
+
+        fun nextState(block: () -> S): Nothing {
+            ensureActive()
+            nextState = block()
+            throw NextStateRequested(this)
+        }
+    }
+
+    private suspend fun executeStateHandler(
+        state: S,
+        callerContext: CoroutineContext? = null,
+        block: suspend (StateTransition) -> Unit,
+    ): S {
+        val transition = StateTransition(currentCoroutineContext(), callerContext)
+        transition.ensureActive()
+        try {
+            block(transition)
+        } catch (signal: NextStateRequested) {
+            if (signal.owner !== transition) throw signal
+        }
+        transition.ensureActive()
+        return transition.nextState ?: state
     }
 
     private fun handleException(t: Throwable) {

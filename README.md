@@ -212,7 +212,7 @@ val store: Store<CounterState, CounterAction, Nothing> = Store(CounterState(coun
 ```
 
 If `nextState { ... }` is not specified, the current state remains unchanged.
-If `nextState { ... }` is called multiple times in the same handler, the last computed value is applied.
+`nextState { ... }` computes the next state and immediately exits the current handler or transaction. Code after it is not executed (except `finally` blocks); the state is applied at the handler boundary. Do not swallow its internal exit signal with `catch (Throwable)`. State updates and event emission check that the Store and executing operation are still active.
 
 For conditional or complex updates, `nextState {}` can make the computation easier to read. The value of the block's final expression is used as the next state.
 
@@ -571,8 +571,6 @@ val store = Store(MyState.Active()) {
 
     state<MyState.Active> {
         action<MyAction.QueryChanged> {
-            nextState { state.copy(query = action.query, isLoading = true) }
-
             launch(control = LaunchControl.CancelPrevious(searchLane)) {
                 delay(300)
                 val result = repository.search(action.query)
@@ -585,6 +583,7 @@ val store = Store(MyState.Active()) {
                     }
                 }
             }
+            nextState { state.copy(query = action.query, isLoading = true) }
         }
 
         action<MyAction.ClearQuery> {
