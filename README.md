@@ -96,29 +96,31 @@ The Store engine has no public construction DSL. For retained components, use
 
 ## Requests and results
 
-Declare a command in the state's suspend `onEnter` block. Execute it in a `commandHandler`, returning
-a success or failure action. Leaving the owning state cancels its commands; results from
-commands that are no longer registered are rejected by the runtime.
-
-For example, using the domain types from the
-[Weather search machine](examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt):
+A `ScreenMachine<State, Action, Event>` owns the declared graph and runs suspending work in
+`onEnter` after committing the transition. Inject the repository when creating the machine.
+The [city search example](examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt)
+uses this entry block in `Loading`:
 
 ```kotlin
-fun citySearchHandler(
-    searchCities: suspend (String) -> List<CityOption>,
-): CommandHandler<SearchCities, CitySearchAction> = commandHandler(
-    onFailure = { request, _ ->
-        CitySearchAction.Failed(request.revision, "Could not load cities. Try again.")
-    },
-) { request ->
-    CitySearchAction.Found(request.revision, searchCities(request.query))
+onEnter {
+    val result = try {
+        CitySearchAction.Found(state.revision, repository.search(state.query.trim()))
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        CitySearchAction.Failed(state.revision, "Could not load cities. Try again.")
+    }
+    dispatch(result)
 }
 ```
 
-Pass this handler to `MachineStore`. `onFailure` maps service errors to domain actions;
-coroutine cancellation is rethrown. For several command types, use
-`commandHandlers { handle<CommandType>(onFailure = ...) { ... } }`.
-For streams with multiple results, use the lower-level `CommandHandler` callback.
+The Store cancels the entry on exit. Its queued result carries the owning activation.
+On restore, a pending entry restarts with its saved state. Use `event(...)` for one-time
+outputs such as requesting an animation. A screen with no such outputs can declare `NoEvent`.
+
+Command-based machines can use `commandHandler` or `commandHandlers` when command identity,
+queue policies or separate command handlers are part of the model.
+
 In the behavior DSL, `on<Action>` is synchronous and transactional; `onEnter` runs outside
 that transaction and may suspend. Use ordinary Kotlin conditions and `delay`. Entry work
 belongs to the state activation and is cancelled on exit. `state` stays the snapshot captured

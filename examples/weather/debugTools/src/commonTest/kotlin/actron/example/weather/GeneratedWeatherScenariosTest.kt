@@ -14,6 +14,7 @@ import actron.statechart.machine.*
 import actron.statechart.test.*
 import actron.timetravel.HistoryExportSettings
 import actron.timetravel.test.recording
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.*
@@ -25,7 +26,7 @@ class GeneratedWeatherScenariosTest {
             trace.assertSuccess()
             val machine =
                 actron.example.weather.feature.cities.presentation.CitySearchMachine
-                    .create()
+                    .create { awaitCancellation() }
             var snapshot = trace.initial
             for (step in trace.steps) {
                 val replayed = machine.decide(snapshot = snapshot, input = step.input)

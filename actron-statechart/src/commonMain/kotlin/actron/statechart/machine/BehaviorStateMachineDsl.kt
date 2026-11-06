@@ -202,25 +202,25 @@ internal sealed interface ActionDestination {
 /** Immutable entry data and state-owned suspend operations. Blocking I/O still needs its own dispatcher. */
 @ActronStoreDsl
 class BehaviorEntryScope<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
-    val state: C,
+    override val state: C,
     val now: MachineTime,
     private val publish: (EntryOutput<A>) -> Unit,
     private val execute: suspend (CMD) -> Unit,
-) {
+) : ScreenEntryScope<C, A, E> {
     suspend fun target(state: C) {
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
         publish(EntryOutput.Transition(context = state, expectedContext = this.state))
     }
 
     /** Applies a result to the current snapshot through a state-owned queued action. */
-    suspend fun dispatch(action: A) {
+    override suspend fun dispatch(action: A) {
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
         publish(EntryOutput.Dispatch(action = action))
     }
 
     suspend fun command(command: CMD) = execute(command)
 
-    suspend fun event(event: E) {
+    override suspend fun event(event: E) {
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
         publish(EntryOutput.Emit(event = event))
     }

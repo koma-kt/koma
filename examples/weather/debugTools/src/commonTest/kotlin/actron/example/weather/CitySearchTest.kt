@@ -12,7 +12,6 @@ import actron.example.weather.feature.cities.domain.CitySearchRepository
 import actron.example.weather.feature.cities.presentation.CitySearchAction
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.cities.presentation.CitySearchState
-import actron.example.weather.feature.cities.presentation.citySearchHandler
 import actron.statechart.machine.MachineClock
 import actron.statechart.machine.MachineStore
 import io.ktor.client.HttpClient
@@ -271,9 +270,8 @@ class CitySearchTest {
 
 private fun TestScope.searchStore(repository: CitySearchRepository) =
     MachineStore(
-        CitySearchMachine.create(),
+        CitySearchMachine.create(repository),
         CitySearchState.Idle(),
-        citySearchHandler(repository),
         backgroundScope,
         clock = MachineClock.monotonic(testScheduler.timeSource),
         coroutineContext = coroutineContext,

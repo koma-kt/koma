@@ -54,9 +54,8 @@ class WeatherCheckpointPersistenceTest {
             fun instance() =
                 DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper).retainedMachine(
                     key = "city-search",
-                    machine = CitySearchMachine.create(),
+                    machine = CitySearchMachine.create(repo),
                     initial = CitySearchState.Idle(),
-                    handler = citySearchHandler(repo),
                     coroutineContext = coroutineContext,
                     restoration = history.searchRestoration(),
                 )
@@ -114,9 +113,8 @@ class WeatherCheckpointPersistenceTest {
             fun instance() =
                 DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper).retainedMachine(
                     key = "city-search",
-                    machine = CitySearchMachine.create(),
+                    machine = CitySearchMachine.create(repo),
                     initial = CitySearchState.Idle(),
-                    handler = citySearchHandler(repo),
                     coroutineContext = coroutineContext,
                     restoration = history.searchRestoration(),
                 )

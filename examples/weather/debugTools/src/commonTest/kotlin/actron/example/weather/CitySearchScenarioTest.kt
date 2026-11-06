@@ -3,6 +3,7 @@ package actron.example.weather
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.feature.cities.presentation.*
 import actron.statechart.test.test
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -12,26 +13,24 @@ import kotlin.time.Duration.Companion.seconds
 
 class CitySearchScenarioTest {
     @Test
-    fun searchSuccessUsesVirtualTimeAndScriptedCommand() =
+    fun entrySearchesTrimmedTextAndPreservesTheOriginalQuery() =
         runTest {
             val report =
-                // The DSL owns a real queued Store with scripted IO and closes it after assertions.
-                CitySearchMachine.create().test(this, CitySearchState.Idle()) {
-                    expectState<CitySearchState.Idle>()
-                    dispatch(CitySearchAction.ChangeQuery("London"))
-                    expectState<CitySearchState.Debouncing>()
-                    advanceTimeBy(349.milliseconds)
-                    expectState<CitySearchState.Debouncing>()
-                    advanceTimeBy(1.milliseconds)
-                    expectState<CitySearchState.Loading>()
-                    completeCommand { command ->
-                        assertEquals("London", command.query)
-                        CitySearchAction.Found(command.revision, emptyList())
+                CitySearchMachine
+                    .create { query ->
+                        assertEquals("London", query)
+                        emptyList()
+                    }.test(this, CitySearchState.Idle()) {
+                        expectState<CitySearchState.Idle>()
+                        dispatch(CitySearchAction.ChangeQuery(" London "))
+                        expectState<CitySearchState.Debouncing>()
+                        advanceTimeBy(349.milliseconds)
+                        expectState<CitySearchState.Debouncing>()
+                        advanceTimeBy(1.milliseconds)
+                        assertEquals(CitySearchState.Success(" London ", 1, emptyList()), expectState<CitySearchState.Success>())
+                        dispatch(CitySearchAction.ChangeQuery(""))
+                        expectState<CitySearchState.Idle>()
                     }
-                    expectState<CitySearchState.Success>()
-                    dispatch(CitySearchAction.ChangeQuery(""))
-                    expectState<CitySearchState.Idle>()
-                }
             assertEquals(expected = 6, actual = report.transitions.covered.size)
         }
 
@@ -39,10 +38,10 @@ class CitySearchScenarioTest {
     fun errorTimeoutAndClearCancelPendingWork() =
         runTest {
             val report =
-                CitySearchMachine.create().test(this, CitySearchState.Idle()) {
+                CitySearchMachine.create { awaitCancellation() }.test(this, CitySearchState.Idle()) {
                     dispatch(CitySearchAction.ChangeQuery("L"))
                     advanceTimeBy(350.milliseconds)
-                    completeCommand { CitySearchAction.Failed(it.revision, "offline") }
+                    dispatch(CitySearchAction.Failed(context.revision, "offline"))
                     assertEquals(RequestFailure.Unavailable(message = "offline"), expectState<CitySearchState.Error>().cause)
                     dispatch(CitySearchAction.ChangeQuery("Lo"))
                     advanceTimeBy(350.milliseconds)

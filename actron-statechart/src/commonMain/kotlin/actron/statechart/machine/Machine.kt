@@ -290,7 +290,7 @@ fun <C : Any, A : Action, CMD : Any, E : Event> Machine(
  * A [MachineInput.CommandResult] whose command is not registered any more is ignored as stale;
  * that is how a late result of a cancelled load cannot complete a newer one.
  */
-class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
+open class Machine<C : Any, A : Action, CMD : Any, E : Event> internal constructor(
     val id: DefinitionId,
     val version: DefinitionVersion,
     val chart: StateChartDefinition,

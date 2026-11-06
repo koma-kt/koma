@@ -20,13 +20,13 @@ observation. Use typed predicates to say what starts and satisfies the obligatio
 
 ```kotlin
 val rules = TemporalRules<
-    CitySearchState, CitySearchAction, SearchCities, NoEvent
+    CitySearchState, CitySearchAction, Unit, NoEvent
 >().apply {
     respondsWithin(
         name = "each-search-finishes-or-is-cancelled",
         within = 8.seconds,
         maxSteps = 20,
-        triggered = { it.explained.decision.commands.isNotEmpty() },
+        triggered = { it.before.context !is CitySearchState.Loading && it.after.context is CitySearchState.Loading },
         satisfied = { started, later ->
             later.after.context.revision != started.after.context.revision ||
                 later.after.context !is CitySearchState.Loading

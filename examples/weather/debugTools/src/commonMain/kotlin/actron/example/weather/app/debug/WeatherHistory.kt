@@ -6,6 +6,7 @@ import actron.core.InputAttribution
 import actron.example.weather.app.session.WeatherFrame
 import actron.example.weather.app.session.WeatherRoute
 import actron.example.weather.app.session.WeatherSession
+import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
@@ -44,7 +45,7 @@ class WeatherHistory(
     val panel = HistoryPanelState<WeatherHistoryFrame>()
     val panelLayout = actron.timetravel.compose.HistoryPanelLayoutState()
     val panelVisible = MutableStateFlow(false)
-    private val searchChart = CitySearchMachine.create().chart
+    private val searchChart = CitySearchMachine.create(LocalCitySearchRepository).chart
     private val weatherCharts =
         mapOf(
             "city-weather" to CityWeatherMachine.create().chart,

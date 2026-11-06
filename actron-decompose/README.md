@@ -17,9 +17,8 @@ Given your machine definition and command handler:
 ```kotlin
 val store = componentContext.retainedMachine(
     key = "city-search",
-    machine = CitySearchMachine.create(),
+    machine = CitySearchMachine.create(repository),
     initial = CitySearchState.Idle(),
-    handler = citySearchHandler(repository),
 )
 ```
 

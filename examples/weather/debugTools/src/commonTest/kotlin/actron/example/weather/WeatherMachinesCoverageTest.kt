@@ -1,6 +1,7 @@
 package actron.example.weather
 
 import actron.example.weather.core.fixtures.demoCities
+import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherAction
@@ -10,6 +11,7 @@ import actron.example.weather.feature.weather.domain.HourlyForecast
 import actron.example.weather.feature.weather.domain.WeatherReading
 import actron.example.weather.feature.weather.presentation.*
 import actron.statechart.test.*
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 import kotlin.time.Duration.Companion.milliseconds
@@ -18,12 +20,12 @@ import kotlin.time.Duration.Companion.seconds
 class WeatherMachinesCoverageTest {
     private enum class Phase { Idle, Debouncing, Loading, Success, Error, TimeoutError }
 
-    private suspend fun MachineTestScenario<CitySearchState, CitySearchAction, SearchCities, actron.example.weather.core.mvi.NoEvent>.preparePhase(phase: Phase) {
+    private suspend fun MachineTestScenario<CitySearchState, CitySearchAction, Unit, NoEvent>.preparePhase(phase: Phase) {
         if (phase != Phase.Idle) dispatch(CitySearchAction.ChangeQuery("London"))
         if (phase != Phase.Idle && phase != Phase.Debouncing) advanceTimeBy(350.milliseconds)
         when (phase) {
-            Phase.Success -> completeCommand { CitySearchAction.Found(it.revision, emptyList()) }
-            Phase.Error -> completeCommand { CitySearchAction.Failed(it.revision, "offline") }
+            Phase.Success -> dispatch(CitySearchAction.Found(context.revision, emptyList()))
+            Phase.Error -> dispatch(CitySearchAction.Failed(context.revision, "offline"))
             Phase.TimeoutError -> advanceTimeBy(8.seconds)
             else -> Unit
         }
@@ -36,7 +38,7 @@ class WeatherMachinesCoverageTest {
             for (phase in Phase.entries) {
                 for (query in listOf("", "New query")) {
                     reports +=
-                        CitySearchMachine.create().test(this, CitySearchState.Idle()) {
+                        CitySearchMachine.create { awaitCancellation() }.test(this, CitySearchState.Idle()) {
                             preparePhase(phase = phase)
                             dispatch(CitySearchAction.ChangeQuery(query))
                             assertEquals(query, context.query)
@@ -52,7 +54,7 @@ class WeatherMachinesCoverageTest {
             }
             val coverage = reports.reduce { a, b -> a.merge(b) }
             coverage.assertTransitionsCovered()
-            val chart = CitySearchMachine.create().chart
+            val chart = CitySearchMachine.create { awaitCancellation() }.chart
             val observed =
                 coverage.transitions.covered
                     .map { id -> chart.transitions[id.index].let { "${it.source.value}->${it.target.value}" } }
@@ -93,7 +95,7 @@ class WeatherMachinesCoverageTest {
     @Test
     fun searchRejectsStaleAnswersAndRestartsDebounceOnEveryEdit() =
         runTest {
-            CitySearchMachine.create().test(this, CitySearchState.Idle()) {
+            CitySearchMachine.create { awaitCancellation() }.test(this, CitySearchState.Idle()) {
                 dispatch(CitySearchAction.ChangeQuery("L"))
                 advanceTimeBy(349.milliseconds)
                 dispatch(CitySearchAction.ChangeQuery("Lo"))
@@ -106,7 +108,7 @@ class WeatherMachinesCoverageTest {
                 dispatch(CitySearchAction.Found(revision - 1, emptyList()))
                 dispatch(CitySearchAction.Failed(revision - 1, "old failure"))
                 expectState<CitySearchState.Loading>()
-                completeCommand { CitySearchAction.Found(it.revision, emptyList()) }
+                dispatch(CitySearchAction.Found(context.revision, emptyList()))
                 assertEquals("Lo", context.query)
             }
         }

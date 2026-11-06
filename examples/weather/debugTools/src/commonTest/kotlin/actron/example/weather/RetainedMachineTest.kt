@@ -8,7 +8,6 @@ import actron.example.weather.core.fixtures.demoCities
 import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.cities.presentation.CitySearchState
-import actron.example.weather.feature.cities.presentation.citySearchHandler
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherAction
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
@@ -89,9 +88,8 @@ class RetainedMachineTest {
             fun create() =
                 DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper).retainedMachine(
                     key = "search",
-                    machine = CitySearchMachine.create(),
+                    machine = CitySearchMachine.create(LocalCitySearchRepository),
                     initial = CitySearchState.Idle(),
-                    handler = citySearchHandler(LocalCitySearchRepository),
                     restoration = history.session.searchRestoration(),
                     recording = history.recording(),
                     coroutineContext = coroutineContext,

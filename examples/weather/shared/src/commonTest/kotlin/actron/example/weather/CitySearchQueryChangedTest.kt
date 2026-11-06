@@ -20,9 +20,8 @@ class CitySearchQueryChangedTest {
         runTest {
             val store =
                 MachineStore(
-                    machine = CitySearchMachine.create(),
+                    machine = CitySearchMachine.create { error("Debounce must prevent requests") },
                     context = CitySearchState.Idle(),
-                    handler = CommandHandler { _, _ -> error("Debounce must prevent requests") },
                     scope = backgroundScope,
                     clock = MachineClock.monotonic(testScheduler.timeSource),
                     coroutineContext = StandardTestDispatcher(scheduler = testScheduler),

@@ -19,9 +19,8 @@ the guides explain the contracts behind those calls.
 Suggested source order:
 
 1. [CitySearchMachine](shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt):
-   context, actions, command data, transitions, debounce and cancellation.
-2. [CitySearchEffects](shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchEffects.kt)
-   and [CitySearchComponent](shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchComponent.kt):
+   state, actions, repository lookup, transitions, debounce and cancellation.
+2. [CitySearchComponent](shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchComponent.kt):
    call the feature repository, dispatch actions and collect state.
 3. [CityWeatherMachine](shared/src/commonMain/kotlin/actron/example/weather/feature/weather/presentation/CityWeatherMachine.kt):
    independent regions in one machine.
@@ -126,9 +125,8 @@ A normal machine needs one call to `actron-decompose`:
 ```kotlin
 val store = componentContext.retainedMachine(
     key = "city-search",
-    machine = CitySearchMachine.create(),
+    machine = CitySearchMachine.create(repository),
     initial = CitySearchState.Idle(),
-    handler = citySearchHandler(repository),
 )
 ```
 
@@ -220,7 +218,7 @@ Selecting an event immediately renders the saved application frame with inputs d
 repositories. Live recording continues in the background. Switching to **Live** exits preview.
 **Continue here** replaces the Decompose stack and executors with the selected frame and exits preview. Search context and both independent weather machines are restored
 together. Completed requests stay completed; running read requests restart, queued commands
-keep their lanes. Restoring search v14 preserves the remaining debounce and timeout duration; the timer
+keep their lanes. Restoring search v15 preserves the remaining debounce and timeout duration; the timer
 deadline is stored in the machine snapshot. Old executors are closed; callbacks
 from an earlier branch cannot modify the new frame. After successful restoration, entries after the selected event are removed. Earlier entries
 and the selected event stay available; new execution extends this linear history. The original
@@ -303,36 +301,12 @@ Validation:
 ## Automatically generated tests and recordings
 
 [GeneratedWeatherScenarios.kt](debugTools/src/commonTest/kotlin/actron/example/weather/GeneratedWeatherScenarios.kt)
-shows the developer-facing `machine.scenarios(initial) { ... }` API:
+records an old Moscow entry completing during a new Kazan search. The machine rejects its
+activation and independently rejects an outdated action by revision. A separate trace runs the
+current-weather command. Both traces can be replayed through the pure decision function.
 
-- `actions`: finite search values (empty, Moscow, Kazan), global refresh, forecast/advice retries and advice dismissal.
-- `replies`: success/failure data derived from commands actually emitted by the machine.
-- `rule`: each query edit immediately cancels the old request; old search answers cannot
-  change context. Production composition tests separately check that local child retries preserve siblings.
-- `goal`: require a late Moscow reply during Kazan's request, subsequent Kazan success, and
-  a concrete successful current-weather path. Production composition tests cover independent response order and retries.
-
-Actron discovers the order of actions, real debounce/timeout timers and command responses from
-the graph and decisions. The tests do not prescribe the Moscow→Kazan sequence. They verify
-both a stale command result (rejected by command identity) and a detached stale action (rejected
-by the search revision guard). The test library's own deliberately broken-guard fixture proves
-that the generator detects and reproduces this kind of bug.
-
-Cancellation is the primary behavior: editing Moscow to Kazan exits `Loading`, cancels Moscow's
-command and HTTP coroutine immediately, and only then waits 350 ms before starting Kazan.
-The generated traces assert the cancelled scope and removal of the old command at that edit.
-`CitySearchTest.changingCityCancelsHttpBeforeNextDebounceAndOnlyNewRequestCanFinish` also drives
-the actual Store → handler → repository → Ktor MockEngine chain, verifying that the
-suspended HTTP operation receives cancellation before Kazan starts. Late-answer injection is a
-separate defensive check for an already queued callback or a source that ignores cancellation;
-it does not mean the obsolete HTTP request is intentionally kept running.
-
-With the checked-in data and bounds, search explores 763 decisions and selects 7 scenarios,
-covering **11/11 transitions**. Current Weather explores 12 decisions / 4 scenarios (**7/7**),
-Hourly 27 / 6 (**11/11**), and Advice 21 / 8 (**14/14**). A separate parent test covers its Refresh
-transition and single emitted event. The child models cover all declared timer transitions. This is bounded pure
-model coverage, not exhaustive payload/guard coverage or verification of executor scheduling.
-Existing queued-store tests continue to cover actual command execution and cancellation.
+`CitySearchTest` checks cancellation through the real Store, repository and Ktor mock engine.
+`CitySearchGraphTest` checks the eleven declared edges, guards and restored timer deadlines.
 
 Run the tests and produce ready-to-import recordings:
 
@@ -342,9 +316,7 @@ Run the tests and produce ready-to-import recordings:
 
 Files appear in `examples/weather/debugTools/build/generated-scenarios/`:
 
-- `late-moscow-command.actron.json`: search Moscow, switch to Kazan, ignore Moscow's late
-  command result, then display Kazan's result.
-- `late-moscow-action.actron.json`: the independent revision-guard check.
+- `late-search-results.actron.json`: late Moscow entry and action followed by the Kazan result.
 - `current-weather-success.actron.json`: a standalone current-weather machine reaches Success.
 
 Enable the inspector and use **Import** beside the machine filter. Select events to see the

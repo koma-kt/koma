@@ -1,5 +1,6 @@
 package actron.example.weather.app.session
 
+import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
@@ -24,7 +25,7 @@ object WeatherSavedStateCodec {
     private val group =
         // Generic codecs validate all machines; these read/write adapters alone know Weather's frame.
         checkpointGroup(::WeatherFrame) {
-            machine(machinePersistence(CitySearchMachine.create()), read = { it.search }, write = { frame, search -> frame.copy(search = search) })
+            machine(machinePersistence(CitySearchMachine.create(LocalCitySearchRepository)), read = { it.search }, write = { frame, search -> frame.copy(search = search) })
             machines(persistence = machinePersistence(machine = CityWeatherMachine.create()), read = { frame ->
                 when (val route = frame.route) {
                     WeatherRoute.Search -> emptyList()

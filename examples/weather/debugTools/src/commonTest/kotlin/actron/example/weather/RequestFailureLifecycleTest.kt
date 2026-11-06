@@ -11,6 +11,7 @@ import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecast
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastState
 import actron.example.weather.feature.weather.presentation.CityWeatherMachine
 import actron.statechart.test.test
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,7 +22,7 @@ class RequestFailureLifecycleTest {
     @Test
     fun searchTimeoutUsesTheSameRetryableErrorStateAsRequestFailure() =
         runTest(testBody = {
-            CitySearchMachine.create().test(
+            CitySearchMachine.create { awaitCancellation() }.test(
                 scope = this,
                 initial = CitySearchState.Idle(),
                 scenario = {
@@ -33,7 +34,7 @@ class RequestFailureLifecycleTest {
                     expectState<CitySearchState.Debouncing>()
                     advanceTimeBy(duration = 350.milliseconds)
                     expectState<CitySearchState.Loading>()
-                    completeCommand(result = { CitySearchAction.Failed(revision = it.revision, message = "offline") })
+                    dispatch(CitySearchAction.Failed(revision = context.revision, message = "offline"))
                     assertEquals(expected = RequestFailure.Unavailable(message = "offline"), actual = expectState<CitySearchState.Error>().cause)
                 },
             )

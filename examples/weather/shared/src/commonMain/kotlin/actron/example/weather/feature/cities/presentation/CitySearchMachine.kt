@@ -4,10 +4,13 @@ import actron.core.Action
 import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.feature.cities.domain.CityOption
+import actron.example.weather.feature.cities.domain.CitySearchRepository
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
-import actron.statechart.machine.Machine
-import actron.statechart.machine.typedStateMachine
+import actron.statechart.machine.ScreenMachine
+import actron.statechart.machine.ScreenMachineBuilder
+import actron.statechart.machine.screenMachine
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -76,22 +79,18 @@ sealed interface CitySearchAction : Action {
     ) : CitySearchAction
 }
 
-@Serializable
-data class SearchCities(
-    val query: String,
-    val revision: Long,
-)
-
 /** Declared transitions share one graph with execution, guards and activation-owned timers. */
 object CitySearchMachine {
-    // Stores own snapshots and commands; this immutable definition is shared.
-    private val definition: Machine<CitySearchState, CitySearchAction, SearchCities, NoEvent> =
-        typedStateMachine(
+    fun create(repository: CitySearchRepository): ScreenMachine<CitySearchState, CitySearchAction, NoEvent> =
+        screenMachine(
             id = DefinitionId(value = "city-search"),
-            // v14 stores the full sealed state in checkpoints and recordings.
-            version = DefinitionVersion(value = "14"),
+            // v15 resumes pending Loading entry work from its saved state.
+            version = DefinitionVersion(value = "15"),
             initial = CitySearchState.Idle(),
-        ) {
+        ) { declareStates(repository) }
+
+    private val declareStates: ScreenMachineBuilder<CitySearchState, CitySearchAction, NoEvent>.(CitySearchRepository) -> Unit =
+        { repository ->
             state<CitySearchState.Idle> {
                 on<CitySearchAction.ChangeQuery> {
                     target { action ->
@@ -149,12 +148,15 @@ object CitySearchMachine {
                     }
                 }
                 onEnter {
-                    command(
-                        SearchCities(
-                            query = state.query.trim(),
-                            revision = state.revision,
-                        ),
-                    )
+                    val result =
+                        try {
+                            CitySearchAction.Found(state.revision, repository.search(state.query.trim()))
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            CitySearchAction.Failed(state.revision, "Could not load cities. Try again.")
+                        }
+                    dispatch(result)
                 }
                 on<CitySearchAction.Found> {
                     guard { action -> action.revision == state.revision }
@@ -179,6 +181,4 @@ object CitySearchMachine {
                 }
             }
         }
-
-    fun create(): Machine<CitySearchState, CitySearchAction, SearchCities, NoEvent> = definition
 }

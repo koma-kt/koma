@@ -48,3 +48,14 @@ fun forbiddenRootWriters() =
             onExit { context = Counter() } // reject: context
         }
     }
+
+fun forbiddenScreenCommand() =
+    actron.statechart.machine.screenMachine<Counter, Increment, Ev>(
+        DefinitionId("direct-entry"),
+        DefinitionVersion("1"),
+        Counter(),
+    ) {
+        state<Counter> {
+            onEnter { command(SendPing) } // reject: command
+        }
+    }

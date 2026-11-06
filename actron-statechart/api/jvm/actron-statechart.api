@@ -1386,12 +1386,12 @@ public final class actron/statechart/machine/BehaviorActionScope {
 	public static synthetic fun target$default (Lactron/statechart/machine/BehaviorActionScope;Ljava/lang/Object;Lactron/statechart/TransitionKind;ILjava/lang/Object;)V
 }
 
-public final class actron/statechart/machine/BehaviorEntryScope {
+public final class actron/statechart/machine/BehaviorEntryScope : actron/statechart/machine/ScreenEntryScope {
 	public final fun command (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun dispatch (Lactron/core/Action;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun event (Lactron/core/Event;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun dispatch (Lactron/core/Action;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun event (Lactron/core/Event;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getNow-8PHqNVw ()J
-	public final fun getState ()Ljava/lang/Object;
+	public fun getState ()Ljava/lang/Object;
 	public final fun target (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
@@ -2719,7 +2719,7 @@ public final class actron/statechart/machine/Lanes {
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class actron/statechart/machine/Machine {
+public class actron/statechart/machine/Machine {
 	public final fun checkInvariants (Lactron/statechart/machine/MachineSnapshot;)Ljava/util/List;
 	public final fun decide (Lactron/statechart/machine/MachineSnapshot;Lactron/statechart/machine/MachineInput;)Lactron/statechart/machine/Decision;
 	public final fun decideExplained (Lactron/statechart/machine/MachineSnapshot;Lactron/statechart/machine/MachineInput;)Lactron/statechart/machine/ExplainedDecision;
@@ -3110,7 +3110,9 @@ public abstract interface class actron/statechart/machine/MachineStore : actron/
 
 public final class actron/statechart/machine/MachineStoreKt {
 	public static final fun MachineStore (Lactron/statechart/machine/Machine;Ljava/lang/Object;Lactron/statechart/machine/CommandHandler;Lkotlinx/coroutines/CoroutineScope;Lactron/statechart/machine/MachineClock;Lkotlin/coroutines/CoroutineContext;Lactron/statechart/machine/AdmissionPolicy;Ljava/util/List;Lactron/statechart/machine/MailboxConfig;Lkotlin/jvm/functions/Function1;)Lactron/statechart/machine/MachineStore;
+	public static final fun MachineStore (Lactron/statechart/machine/ScreenMachine;Ljava/lang/Object;Lkotlinx/coroutines/CoroutineScope;Lactron/statechart/machine/MachineClock;Lkotlin/coroutines/CoroutineContext;Lactron/statechart/machine/AdmissionPolicy;Ljava/util/List;Lactron/statechart/machine/MailboxConfig;Lkotlin/jvm/functions/Function1;)Lactron/statechart/machine/MachineStore;
 	public static synthetic fun MachineStore$default (Lactron/statechart/machine/Machine;Ljava/lang/Object;Lactron/statechart/machine/CommandHandler;Lkotlinx/coroutines/CoroutineScope;Lactron/statechart/machine/MachineClock;Lkotlin/coroutines/CoroutineContext;Lactron/statechart/machine/AdmissionPolicy;Ljava/util/List;Lactron/statechart/machine/MailboxConfig;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lactron/statechart/machine/MachineStore;
+	public static synthetic fun MachineStore$default (Lactron/statechart/machine/ScreenMachine;Ljava/lang/Object;Lkotlinx/coroutines/CoroutineScope;Lactron/statechart/machine/MachineClock;Lkotlin/coroutines/CoroutineContext;Lactron/statechart/machine/AdmissionPolicy;Ljava/util/List;Lactron/statechart/machine/MailboxConfig;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lactron/statechart/machine/MachineStore;
 }
 
 public final class actron/statechart/machine/MachineTime : java/lang/Comparable {
@@ -3407,6 +3409,33 @@ public final class actron/statechart/machine/RouteProtocol$OneWay : actron/state
 	public fun getSuffix ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class actron/statechart/machine/ScreenEntryScope {
+	public abstract fun dispatch (Lactron/core/Action;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun event (Lactron/core/Event;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getState ()Ljava/lang/Object;
+}
+
+public final class actron/statechart/machine/ScreenMachine : actron/statechart/machine/Machine {
+}
+
+public final class actron/statechart/machine/ScreenMachineBuilder {
+	public fun <init> (Lactron/statechart/machine/TypedStateMachineBuilder;)V
+	public final fun getRoot ()Lactron/statechart/machine/TypedStateMachineBuilder;
+}
+
+public final class actron/statechart/machine/ScreenMachineKt {
+	public static final fun noCommandHandler ()Lactron/statechart/machine/CommandHandler;
+	public static final fun screenMachine-jlvHTy0 (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;Lkotlin/jvm/functions/Function1;)Lactron/statechart/machine/ScreenMachine;
+}
+
+public final class actron/statechart/machine/ScreenStateBuilder {
+	public fun <init> (Lactron/statechart/machine/TypedMachineStateBuilder;)V
+	public final fun after-VtjQ1oo (JLkotlin/jvm/functions/Function1;)V
+	public final fun always (Lkotlin/jvm/functions/Function1;)V
+	public final fun getRules ()Lactron/statechart/machine/TypedMachineStateBuilder;
+	public final fun onEnter (Lkotlin/jvm/functions/Function2;)V
 }
 
 public final class actron/statechart/machine/SnapshotMigration {

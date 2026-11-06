@@ -536,3 +536,7 @@ Typed and invoked roots use their full state type as graph identity. The target 
 next value, including shared data. Parallel regions own the read/write bindings for their
 part of the enclosing state. Behavior handlers also target a complete value. An internal
 target preserves its activation. This supersedes the earlier root phase and update APIs.
+
+City search uses `ScreenMachine<State, Action, Event>` and dispatches repository outcomes
+from its activation-owned entry. Search definition v15 restores pending entry work and
+its deadline. Command-based definitions continue using the four-parameter machine.

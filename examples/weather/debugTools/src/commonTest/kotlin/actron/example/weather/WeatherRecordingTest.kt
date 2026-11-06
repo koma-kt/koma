@@ -13,6 +13,7 @@ import actron.example.weather.app.session.WeatherRoute
 import actron.example.weather.app.session.freshWeather
 import actron.example.weather.core.domain.City
 import actron.example.weather.core.mvi.RequestState
+import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.weather.presentation.*
 import actron.statechart.machine.*
@@ -21,7 +22,7 @@ import kotlin.test.*
 
 internal fun recordingHistory(): WeatherHistory {
     val history = WeatherHistory()
-    val search = CitySearchMachine.create()
+    val search = CitySearchMachine.create(LocalCitySearchRepository)
     val searchState = search.initialSnapshot(CitySearchState.Loading("Москва", 0))
     val searching = WeatherFrame(search = ExecutorCheckpoint.initial(searchState))
     val details = HistoryDetails("ChangeQuery(Москва)", "Action", "Handled", emptyList(), listOf(StateField("query", "Москва")))

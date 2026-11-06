@@ -13,9 +13,9 @@ tests use Ktor MockEngine, never the public weather server.
 | CitySearchGraphTest | Exact declared edges, response guard outcomes and remaining deadlines on resume |
 | CitySearchScenarioTest | Debounce, success, failure, timeout and clearing |
 | WeatherScenarioTest | Standalone forecast and advice lifecycles, retry, dismissal and timeout |
-| GeneratedWeatherScenarios | Recorded executor scenarios with late command result and late action |
+| GeneratedWeatherScenarios | Recorded executor scenarios with late entry result and late action |
 | GeneratedWeatherScenariosTest | Replay without I/O and importable display recordings |
-| CitySearchTest | Store/handler/repository integration and cancellation of HTTP |
+| CitySearchTest | Store/entry/repository integration and cancellation of HTTP |
 | WeatherMachinesCoverageTest | Observed state-pair coverage and replacing a query from every phase |
 | WeatherHierarchyTest | One parent refresh, three independent children, independent dismissal |
 | GeneratedRecordingFilesTest | JVM export of executed scenarios |
@@ -23,14 +23,10 @@ tests use Ktor MockEngine, never the public weather server.
 ## Drive an actual machine
 
 ```kotlin
-CitySearchMachine.create().test(scope = this, initial = CitySearchState.Idle()) {
+CitySearchMachine.create { emptyList() }.test(scope = this, initial = CitySearchState.Idle()) {
     dispatch(action = CitySearchAction.ChangeQuery(query = "London"))
     expectState<CitySearchState.Debouncing>()
     advanceTimeBy(duration = 350.milliseconds)
-    expectState<CitySearchState.Loading>()
-    completeCommand { command ->
-        CitySearchAction.Found(revision = command.revision, results = emptyList())
-    }
     expectState<CitySearchState.Success>()
 }
 ```
@@ -57,7 +53,7 @@ coverage and guard mutations remain supported for the explicit graph DSL elsewhe
 ## Cancellation and late outcomes
 
 Changing query exits the old activation before the new debounce finishes. Repository integration
-checks cancellation reaches HTTP. A recorded scenario also feeds an obsolete command result
+checks cancellation reaches HTTP. A recorded scenario also feeds an obsolete entry result
 through the production decision entrypoint and verifies rejection, then sends an obsolete action
 to check revision protection independently. The core DSL tests additionally use a NonCancellable
 old entry coroutine to reproduce delivery after exit.

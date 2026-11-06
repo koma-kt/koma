@@ -7,6 +7,7 @@ import actron.example.weather.feature.cities.presentation.CitySearchState
 import actron.statechart.Trigger
 import actron.statechart.test.MachineTestDriver
 import actron.statechart.test.test
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,7 +17,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class CitySearchGraphTest {
     @Test
     fun graphContainsOnlyDeclaredBusinessEdges() {
-        val edges = CitySearchMachine.create().chart.transitions
+        val edges = CitySearchMachine.create { awaitCancellation() }.chart.transitions
         assertEquals(expected = 11, actual = edges.size)
         assertEquals(expected = 2, actual = edges.count { it.trigger == Trigger.Eventless })
         assertEquals(expected = 2, actual = edges.count { it.trigger is Trigger.After })
@@ -32,18 +33,18 @@ class CitySearchGraphTest {
     fun guardCoverageRecordsStaleAndCurrentReplies() =
         runTest {
             val report =
-                CitySearchMachine.create().test(scope = this, initial = CitySearchState.Idle()) {
+                CitySearchMachine.create { awaitCancellation() }.test(scope = this, initial = CitySearchState.Idle()) {
                     dispatch(action = CitySearchAction.ChangeQuery(query = "Paris"))
                     advanceTimeBy(duration = 350.milliseconds)
                     dispatch(action = CitySearchAction.Found(revision = 0, results = emptyList()))
                     dispatch(action = CitySearchAction.Failed(revision = 0, message = "old"))
                     expectState<CitySearchState.Loading>()
-                    completeCommand(result = { CitySearchAction.Found(revision = it.revision, results = emptyList()) })
+                    dispatch(CitySearchAction.Found(revision = context.revision, results = emptyList()))
                     dispatch(action = CitySearchAction.ChangeQuery(query = "London"))
                     advanceTimeBy(duration = 350.milliseconds)
-                    completeCommand(result = { CitySearchAction.Failed(revision = it.revision, message = "offline") })
+                    dispatch(CitySearchAction.Failed(revision = context.revision, message = "offline"))
                 }
-            val edges = CitySearchMachine.create().chart.transitions
+            val edges = CitySearchMachine.create { awaitCancellation() }.chart.transitions
             val responses =
                 edges.indices.filter { index ->
                     val trigger = edges[index].trigger
@@ -69,7 +70,7 @@ class CitySearchGraphTest {
             remaining = 150.milliseconds,
             before = CitySearchState.Debouncing("Paris", 1),
             after = CitySearchState.Loading("Paris", 1),
-            commands = 1,
+            pendingEntries = 1,
         )
 
     @Test
@@ -79,7 +80,7 @@ class CitySearchGraphTest {
             remaining = 200.milliseconds,
             before = CitySearchState.Loading("Paris", 1),
             after = CitySearchState.Error("Paris", 1, cause = RequestFailure.Timeout),
-            commands = 0,
+            pendingEntries = 0,
         )
 
     private fun checkRestoration(
@@ -87,9 +88,9 @@ class CitySearchGraphTest {
         remaining: Duration,
         before: CitySearchState,
         after: CitySearchState,
-        commands: Int,
+        pendingEntries: Int,
     ) = runTest {
-        val machine = CitySearchMachine.create()
+        val machine = CitySearchMachine.create { awaitCancellation() }
         val original = MachineTestDriver(machine = machine, context = CitySearchState.Idle(), scope = this)
         val checkpoint =
             try {
@@ -106,7 +107,7 @@ class CitySearchGraphTest {
             assertEquals(expected = before, actual = resumed.snapshot.context)
             resumed.advanceBy(duration = 1.milliseconds)
             assertEquals(expected = after, actual = resumed.snapshot.context)
-            assertEquals(expected = commands, actual = resumed.runningCommands.size)
+            assertEquals(expected = pendingEntries, actual = resumed.snapshot.pendingEntries.size)
             resumed.send(action = CitySearchAction.ChangeQuery(query = ""))
             resumed.assertNoPendingWork()
         } finally {

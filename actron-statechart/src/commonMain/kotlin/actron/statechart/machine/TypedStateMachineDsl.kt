@@ -203,10 +203,9 @@ open class TypedStateMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E :
             id: DefinitionId,
             version: DefinitionVersion,
             initial: S,
-        ): Machine<C, A, CMD, E> {
-            val initialId = finish(initial)
-            return Machine(id, version, StateChartDefinition(initialId, nodes.toList(), transitions.toList()), implementation)
-        }
+        ): Machine<C, A, CMD, E> = Machine(id, version, definition(initial), implementation)
+
+        internal fun definition(initial: S): StateChartDefinition = StateChartDefinition(finish(initial), nodes.toList(), transitions.toList())
 
         internal fun finish(
             initial: S,

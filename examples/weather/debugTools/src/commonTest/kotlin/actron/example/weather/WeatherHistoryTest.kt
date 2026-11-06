@@ -10,6 +10,7 @@ import actron.example.weather.app.session.WeatherFrame
 import actron.example.weather.app.session.WeatherSavedState
 import actron.example.weather.app.session.WeatherSavedStateCodec
 import actron.example.weather.app.session.searchRestoration
+import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.*
 import actron.statechart.machine.*
 import actron.timetravel.HistoryConfiguration
@@ -91,8 +92,8 @@ class WeatherHistoryTest {
     @Test
     fun oldBranchCallbacksCannotChangeNewBranch() {
         val history = WeatherHistory()
-        val machine = CitySearchMachine.create()
-        val checkpoint: ExecutorCheckpoint<CitySearchState, SearchCities> = ExecutorCheckpoint.initial(machine.initialSnapshot(CitySearchState.Idle()))
+        val machine = CitySearchMachine.create(LocalCitySearchRepository)
+        val checkpoint: ExecutorCheckpoint<CitySearchState, Unit> = ExecutorCheckpoint.initial(machine.initialSnapshot(CitySearchState.Idle()))
         val observer = history.observer(machine, checkpoint, { historyFields(Json.encodeToJsonElement(CitySearchState.serializer(), it)) })
         history.session.beginBranch(WeatherFrame())
         observer.onDecided(InputAttribution.Unattributed, MachineInput.Start(MachineTime.Zero), machine.decideExplained(checkpoint.snapshot, MachineInput.Start(MachineTime.Zero)))
@@ -143,8 +144,8 @@ class WeatherHistoryTest {
         history: WeatherHistory,
         queries: List<String>,
     ) {
-        val machine = CitySearchMachine.create()
-        val checkpoint: ExecutorCheckpoint<CitySearchState, SearchCities> = ExecutorCheckpoint.initial(machine.initialSnapshot(CitySearchState.Idle()))
+        val machine = CitySearchMachine.create(LocalCitySearchRepository)
+        val checkpoint: ExecutorCheckpoint<CitySearchState, Unit> = ExecutorCheckpoint.initial(machine.initialSnapshot(CitySearchState.Idle()))
         val observer = history.observer(machine, checkpoint, { historyFields(Json.encodeToJsonElement(CitySearchState.serializer(), it)) })
         val persistence =
             history.session

@@ -14,8 +14,6 @@ import actron.example.weather.feature.cities.presentation.CitySearchComponent
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.cities.presentation.CitySearchState
 import actron.example.weather.feature.cities.presentation.DefaultCitySearchComponent
-import actron.example.weather.feature.cities.presentation.SearchCities
-import actron.example.weather.feature.cities.presentation.citySearchHandler
 import actron.example.weather.feature.weather.domain.HourlyForecastRepository
 import actron.example.weather.feature.weather.domain.WeatherRepository
 import actron.example.weather.feature.weather.presentation.CityWeatherComponent
@@ -30,7 +28,7 @@ class DefaultCitySearchComponentFactory(
     private val coroutineContext: CoroutineContext,
     private val session: WeatherSession,
     private val settingsAction: @androidx.compose.runtime.Composable () -> Unit = {},
-    private val recording: MachineRecording<CitySearchState, CitySearchAction, SearchCities, NoEvent> = MachineRecording { _, _, handler -> MachineDiagnostics(handler) },
+    private val recording: MachineRecording<CitySearchState, CitySearchAction, Unit, NoEvent> = MachineRecording { _, _, handler -> MachineDiagnostics(handler) },
 ) : CitySearchComponent.Factory {
     override fun create(
         componentContext: ComponentContext,
@@ -39,9 +37,8 @@ class DefaultCitySearchComponentFactory(
         val store =
             componentContext.retainedMachine(
                 key = "city-search",
-                machine = CitySearchMachine.create(),
+                machine = CitySearchMachine.create(repository),
                 initial = CitySearchState.Idle(),
-                handler = citySearchHandler(repository),
                 restoration = session.searchRestoration(),
                 recording = recording,
                 coroutineContext = coroutineContext,

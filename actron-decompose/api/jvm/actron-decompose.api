@@ -20,7 +20,9 @@ public final class actron/decompose/MachineRestoration {
 
 public final class actron/decompose/RetainedMachineKt {
 	public static final fun retainedMachine (Lcom/arkivanov/decompose/ComponentContext;Ljava/lang/String;Lactron/statechart/machine/Machine;Ljava/lang/Object;Lactron/statechart/machine/CommandHandler;Lactron/decompose/MachineRestoration;Lactron/decompose/MachineRecording;Lkotlin/coroutines/CoroutineContext;Ljava/util/List;)Lactron/statechart/machine/MachineStore;
+	public static final fun retainedMachine (Lcom/arkivanov/decompose/ComponentContext;Ljava/lang/String;Lactron/statechart/machine/ScreenMachine;Ljava/lang/Object;Lactron/decompose/MachineRestoration;Lactron/decompose/MachineRecording;Lkotlin/coroutines/CoroutineContext;Ljava/util/List;)Lactron/statechart/machine/MachineStore;
 	public static synthetic fun retainedMachine$default (Lcom/arkivanov/decompose/ComponentContext;Ljava/lang/String;Lactron/statechart/machine/Machine;Ljava/lang/Object;Lactron/statechart/machine/CommandHandler;Lactron/decompose/MachineRestoration;Lactron/decompose/MachineRecording;Lkotlin/coroutines/CoroutineContext;Ljava/util/List;ILjava/lang/Object;)Lactron/statechart/machine/MachineStore;
+	public static synthetic fun retainedMachine$default (Lcom/arkivanov/decompose/ComponentContext;Ljava/lang/String;Lactron/statechart/machine/ScreenMachine;Ljava/lang/Object;Lactron/decompose/MachineRestoration;Lactron/decompose/MachineRecording;Lkotlin/coroutines/CoroutineContext;Ljava/util/List;ILjava/lang/Object;)Lactron/statechart/machine/MachineStore;
 }
 
 public final class actron/decompose/StoreObservationKt {
