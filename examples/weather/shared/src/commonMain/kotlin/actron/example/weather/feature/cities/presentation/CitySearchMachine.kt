@@ -8,12 +8,10 @@ import actron.example.weather.feature.cities.domain.CitySearchRepository
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
 import actron.statechart.machine.ScreenMachine
-import actron.statechart.machine.ScreenMachineBuilder
 import actron.statechart.machine.screenMachine
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 @Serializable
 sealed interface CitySearchState {
@@ -84,76 +82,38 @@ object CitySearchMachine {
     fun create(repository: CitySearchRepository): ScreenMachine<CitySearchState, CitySearchAction, NoEvent> =
         screenMachine(
             id = DefinitionId(value = "city-search"),
-            // v15 resumes pending Loading entry work from its saved state.
-            version = DefinitionVersion(value = "15"),
+            // v16 retains the debounce timer; Loading only owns the repository call.
+            version = DefinitionVersion(value = "16"),
             initial = CitySearchState.Idle(),
-        ) { declareStates(repository) }
-
-    private val declareStates: ScreenMachineBuilder<CitySearchState, CitySearchAction, NoEvent>.(CitySearchRepository) -> Unit =
-        { repository ->
+        ) {
             state<CitySearchState.Idle> {
                 on<CitySearchAction.ChangeQuery> {
-                    target { action ->
-                        CitySearchState.QueryChanged(
-                            query = action.query,
-                            revision = state.revision + 1,
-                        )
-                    }
+                    target { action -> CitySearchState.QueryChanged(query = action.query, revision = state.revision + 1) }
                 }
             }
             state<CitySearchState.QueryChanged> {
                 always {
                     guard { state.query.isBlank() }
-                    target { _ ->
-                        CitySearchState.Idle(
-                            query = state.query,
-                            revision = state.revision,
-                        )
-                    }
+                    target { CitySearchState.Idle(query = state.query, revision = state.revision) }
                 }
-                always {
-                    target {
-                        CitySearchState.Debouncing(
-                            query = state.query,
-                            revision = state.revision,
-                        )
-                    }
-                }
+                always { target { CitySearchState.Debouncing(query = state.query, revision = state.revision) } }
             }
             state<CitySearchState.Debouncing> {
                 on<CitySearchAction.ChangeQuery> {
-                    target { action ->
-                        CitySearchState.QueryChanged(
-                            query = action.query,
-                            revision = state.revision + 1,
-                        )
-                    }
+                    target { action -> CitySearchState.QueryChanged(query = action.query, revision = state.revision + 1) }
                 }
-                after(350.milliseconds) {
-                    target { action ->
-                        CitySearchState.Loading(
-                            query = state.query,
-                            revision = state.revision,
-                        )
-                    }
-                }
+                after(350.milliseconds) { target { CitySearchState.Loading(query = state.query, revision = state.revision) } }
             }
             state<CitySearchState.Loading> {
                 on<CitySearchAction.ChangeQuery> {
-                    target { action ->
-                        CitySearchState.QueryChanged(
-                            query = action.query,
-                            revision = state.revision + 1,
-                        )
-                    }
+                    target { action -> CitySearchState.QueryChanged(query = action.query, revision = state.revision + 1) }
                 }
                 onEnter {
                     val result =
-                        try {
+                        runCatching {
                             CitySearchAction.Found(state.revision, repository.search(state.query.trim()))
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (_: Exception) {
+                        }.getOrElse { error ->
+                            if (error is CancellationException || error !is Exception) throw error
                             CitySearchAction.Failed(state.revision, "Could not load cities. Try again.")
                         }
                     dispatch(result)
@@ -165,9 +125,6 @@ object CitySearchMachine {
                 on<CitySearchAction.Failed> {
                     guard { action -> action.revision == state.revision }
                     target { action -> CitySearchState.Error(state.query, state.revision, cause = RequestFailure.Unavailable(message = action.message)) }
-                }
-                after(8.seconds) {
-                    target { CitySearchState.Error(state.query, state.revision, cause = RequestFailure.Timeout) }
                 }
             }
             state<CitySearchState.Success> {

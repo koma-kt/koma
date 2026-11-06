@@ -6,14 +6,13 @@ import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.weather.domain.HourlyForecast
+import actron.example.weather.feature.weather.domain.HourlyForecastRepository
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
-import actron.statechart.machine.Machine
-import actron.statechart.machine.behaviorStateMachine
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.withTimeoutOrNull
+import actron.statechart.machine.ScreenMachine
+import actron.statechart.machine.screenMachine
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
-import kotlin.time.Duration.Companion.seconds
 
 @Serializable
 sealed interface HourlyForecastState {
@@ -65,41 +64,43 @@ sealed interface HourlyForecastAction : Action {
     ) : HourlyForecastAction
 }
 
-@Serializable
-data class LoadHourlyForecast(
-    val city: City,
-)
-
-/** Reusable feature machine: no screen or sibling action is part of its contract. */
 object HourlyForecastMachine {
-    fun create(): Machine<HourlyForecastState, HourlyForecastAction, LoadHourlyForecast, NoEvent> =
-        behaviorStateMachine(
-            id = DefinitionId(value = "hourly-forecast"),
-            version = DefinitionVersion(value = "4"),
+    fun create(repository: HourlyForecastRepository): ScreenMachine<HourlyForecastState, HourlyForecastAction, NoEvent> =
+        screenMachine(
+            id = DefinitionId("hourly-forecast"),
+            version = DefinitionVersion("5"),
             initialType = HourlyForecastState.Ready::class,
-            build = {
-                on<HourlyForecastAction.Refresh> { target(HourlyForecastState.Loading(state.city)) }
-                on<HourlyForecastAction.Retry> { target(HourlyForecastState.Loading(state.city)) }
-                state<HourlyForecastState.Ready>()
-                state<HourlyForecastState.Loading>(build = {
-                    onEnter {
-                        withTimeoutOrNull<Unit>(timeout = 8.seconds) {
-                            command(command = LoadHourlyForecast(city = state.city))
-                            awaitCancellation()
+        ) {
+            state<HourlyForecastState.Ready> {
+                on<HourlyForecastAction.Refresh> { target { HourlyForecastState.Loading(state.city) } }
+                on<HourlyForecastAction.Retry> { target { HourlyForecastState.Loading(state.city) } }
+            }
+            state<HourlyForecastState.Loading> {
+                on<HourlyForecastAction.Refresh> { target { HourlyForecastState.Loading(state.city) } }
+                on<HourlyForecastAction.Retry> { target { HourlyForecastState.Loading(state.city) } }
+                onEnter {
+                    val result =
+                        runCatching {
+                            HourlyForecastAction.Loaded(forecast = repository.load(state.city))
+                        }.getOrElse { error ->
+                            if (error is CancellationException || error !is Exception) throw error
+                            HourlyForecastAction.Failed(error.message ?: "Could not load hourly forecast")
                         }
-                        target(HourlyForecastState.Error(state.city, cause = RequestFailure.Timeout))
-                    }
-                    on<HourlyForecastAction.Loaded> { action ->
-                        if (action.forecast.city == state.city) {
-                            target(HourlyForecastState.Success(state.city, action.forecast))
-                        }
-                    }
-                    on<HourlyForecastAction.Failed> { action ->
-                        target(HourlyForecastState.Error(state.city, cause = RequestFailure.Unavailable(message = action.message)))
-                    }
-                })
-                state<HourlyForecastState.Success>()
-                state<HourlyForecastState.Error>()
-            },
-        )
+                    dispatch(result)
+                }
+                on<HourlyForecastAction.Loaded> {
+                    guard { action -> action.forecast.city == state.city }
+                    target { action -> HourlyForecastState.Success(state.city, action.forecast) }
+                }
+                on<HourlyForecastAction.Failed> { target { action -> HourlyForecastState.Error(state.city, RequestFailure.Unavailable(action.message)) } }
+            }
+            state<HourlyForecastState.Success> {
+                on<HourlyForecastAction.Refresh> { target { HourlyForecastState.Loading(state.city) } }
+                on<HourlyForecastAction.Retry> { target { HourlyForecastState.Loading(state.city) } }
+            }
+            state<HourlyForecastState.Error> {
+                on<HourlyForecastAction.Refresh> { target { HourlyForecastState.Loading(state.city) } }
+                on<HourlyForecastAction.Retry> { target { HourlyForecastState.Loading(state.city) } }
+            }
+        }
 }

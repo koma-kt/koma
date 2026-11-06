@@ -12,13 +12,14 @@ been published. See the root installation guide for release availability.
 
 ## One-call machine installation
 
-Given your machine definition and command handler:
+Inject the repository into the screen definition and select its execution context at installation:
 
 ```kotlin
 val store = componentContext.retainedMachine(
     key = "city-search",
     machine = CitySearchMachine.create(repository),
     initial = CitySearchState.Idle(),
+    coroutineContext = Dispatchers.Default,
 )
 ```
 

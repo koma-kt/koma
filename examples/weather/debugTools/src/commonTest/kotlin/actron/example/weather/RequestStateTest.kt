@@ -26,7 +26,7 @@ class RequestStateTest {
             listOf(
                 WeatherContext(city = city, current = RequestState.Success(value = weather), hourly = RequestState.Success(value = forecast)),
                 WeatherContext(city = city, current = RequestState.Success(value = weather), hourly = RequestState.Error(cause = RequestFailure.Unavailable(message = "offline"))),
-                WeatherContext(city = city, current = RequestState.Loading, hourly = RequestState.Error(cause = RequestFailure.Timeout)),
+                WeatherContext(city = city, current = RequestState.Loading, hourly = RequestState.Error(cause = RequestFailure.Unavailable("offline"))),
                 WeatherContext(city),
             )
         for (state in states) {
@@ -45,7 +45,7 @@ class RequestStateTest {
                 RequestState.Loading,
                 RequestState.Success("answer"),
                 RequestState.Error(cause = RequestFailure.Unavailable(message = "offline")),
-                RequestState.Error(cause = RequestFailure.Timeout),
+                RequestState.Error(cause = RequestFailure.Unavailable("offline")),
             )
         for (state in states) {
             val encoded = Json.encodeToJsonElement(serializer, state).jsonObject

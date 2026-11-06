@@ -5,15 +5,15 @@ import actron.example.weather.core.domain.City
 import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.feature.weather.domain.WeatherAdvice
+import actron.example.weather.feature.weather.domain.WeatherRepository
+import actron.example.weather.feature.weather.domain.weatherAdvice
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdvicePhase
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
-import actron.statechart.machine.Machine
-import actron.statechart.machine.behaviorStateMachine
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.withTimeoutOrNull
+import actron.statechart.machine.ScreenMachine
+import actron.statechart.machine.screenMachine
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
-import kotlin.time.Duration.Companion.seconds
 
 @Serializable
 sealed interface WeatherAdviceState {
@@ -80,47 +80,54 @@ sealed interface WeatherAdviceAction : Action {
     ) : WeatherAdviceAction
 }
 
-@Serializable
-data class LoadWeatherAdvice(
-    val city: City,
-)
-
 object WeatherAdviceMachine {
-    fun create(): Machine<WeatherAdviceState, WeatherAdviceAction, LoadWeatherAdvice, NoEvent> =
-        behaviorStateMachine(
-            id = DefinitionId(value = "weather-advice"),
-            version = DefinitionVersion(value = "4"),
+    fun create(repository: WeatherRepository): ScreenMachine<WeatherAdviceState, WeatherAdviceAction, NoEvent> =
+        screenMachine(
+            id = DefinitionId("weather-advice"),
+            version = DefinitionVersion("5"),
             initialType = WeatherAdviceState.Ready::class,
-            build = {
-                on<WeatherAdviceAction.Refresh> { target(WeatherAdviceState.Loading(state.city)) }
-                state<WeatherAdviceState.Ready>()
-                state<WeatherAdviceState.Loading>(build = {
-                    onEnter {
-                        withTimeoutOrNull<Unit>(timeout = 8.seconds) {
-                            command(command = LoadWeatherAdvice(city = state.city))
-                            awaitCancellation()
+        ) {
+            state<WeatherAdviceState.Ready> {
+                on<WeatherAdviceAction.Refresh> { target { WeatherAdviceState.Loading(state.city) } }
+            }
+            state<WeatherAdviceState.Loading> {
+                on<WeatherAdviceAction.Refresh> { target { WeatherAdviceState.Loading(state.city) } }
+                onEnter {
+                    val result =
+                        runCatching {
+                            val reading = repository.load(state.city)
+                            WeatherAdviceAction.Loaded(reading.city, weatherAdvice(reading))
+                        }.getOrElse { error ->
+                            if (error is CancellationException || error !is Exception) throw error
+                            WeatherAdviceAction.Failed(error.message ?: "Advice request failed")
                         }
-                        target(WeatherAdviceState.Error(state.city, cause = RequestFailure.Timeout))
-                    }
-                    on<WeatherAdviceAction.Loaded> { action ->
-                        if (action.city == state.city) {
-                            target(if (action.items.isEmpty()) WeatherAdviceState.Hidden(state.city) else WeatherAdviceState.Visible(state.city, action.items))
-                        }
-                    }
-                    on<WeatherAdviceAction.Failed> { action ->
-                        target(WeatherAdviceState.Error(state.city, cause = RequestFailure.Unavailable(message = action.message)))
-                    }
-                    on<WeatherAdviceAction.Dismiss> { target(WeatherAdviceState.Dismissed(state.city)) }
-                })
-                state<WeatherAdviceState.Hidden>()
-                state<WeatherAdviceState.Visible>(build = {
-                    on<WeatherAdviceAction.Dismiss> { target(WeatherAdviceState.Dismissed(state.city)) }
-                })
-                state<WeatherAdviceState.Dismissed>()
-                state<WeatherAdviceState.Error>(build = {
-                    on<WeatherAdviceAction.Dismiss> { target(WeatherAdviceState.Dismissed(state.city)) }
-                    on<WeatherAdviceAction.Retry> { target(WeatherAdviceState.Loading(state.city)) }
-                })
-            },
-        )
+                    dispatch(result)
+                }
+                on<WeatherAdviceAction.Loaded> {
+                    guard { action -> action.city == state.city && action.items.isEmpty() }
+                    target { WeatherAdviceState.Hidden(state.city) }
+                }
+                on<WeatherAdviceAction.Loaded> {
+                    guard { action -> action.city == state.city && action.items.isNotEmpty() }
+                    target { action -> WeatherAdviceState.Visible(state.city, action.items) }
+                }
+                on<WeatherAdviceAction.Failed> { target { action -> WeatherAdviceState.Error(state.city, RequestFailure.Unavailable(action.message)) } }
+                on<WeatherAdviceAction.Dismiss> { target { WeatherAdviceState.Dismissed(state.city) } }
+            }
+            state<WeatherAdviceState.Hidden> {
+                on<WeatherAdviceAction.Refresh> { target { WeatherAdviceState.Loading(state.city) } }
+            }
+            state<WeatherAdviceState.Visible> {
+                on<WeatherAdviceAction.Refresh> { target { WeatherAdviceState.Loading(state.city) } }
+                on<WeatherAdviceAction.Dismiss> { target { WeatherAdviceState.Dismissed(state.city) } }
+            }
+            state<WeatherAdviceState.Dismissed> {
+                on<WeatherAdviceAction.Refresh> { target { WeatherAdviceState.Loading(state.city) } }
+            }
+            state<WeatherAdviceState.Error> {
+                on<WeatherAdviceAction.Refresh> { target { WeatherAdviceState.Loading(state.city) } }
+                on<WeatherAdviceAction.Retry> { target { WeatherAdviceState.Loading(state.city) } }
+                on<WeatherAdviceAction.Dismiss> { target { WeatherAdviceState.Dismissed(state.city) } }
+            }
+        }
 }

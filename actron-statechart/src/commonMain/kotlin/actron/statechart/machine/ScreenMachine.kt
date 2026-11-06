@@ -4,6 +4,7 @@ import actron.core.Action
 import actron.core.ActronStoreDsl
 import actron.core.Event
 import actron.statechart.StateChartDefinition
+import kotlin.reflect.KClass
 import kotlin.time.Duration
 
 /** A declared graph whose external work runs directly in its activation-owned entry blocks. */
@@ -19,11 +20,18 @@ fun <S : Any, A : Action, E : Event> screenMachine(
     version: DefinitionVersion,
     initial: S,
     build: ScreenMachineBuilder<S, A, E>.() -> Unit,
+): ScreenMachine<S, A, E> = screenMachine(id, version, initial::class, build)
+
+fun <S : Any, A : Action, E : Event> screenMachine(
+    id: DefinitionId,
+    version: DefinitionVersion,
+    initialType: KClass<out S>,
+    build: ScreenMachineBuilder<S, A, E>.() -> Unit,
 ): ScreenMachine<S, A, E> {
     val implementation = MachineBuilder<S, A, Unit, E>()
     val root = TypedStateMachineBuilder<S, S, A, Unit, E>({ it }, { _, state -> state }, implementation)
     ScreenMachineBuilder(root).build()
-    return ScreenMachine(id, version, root.definition(initial), implementation)
+    return ScreenMachine(id, version, root.definition(initialType), implementation)
 }
 
 @ActronStoreDsl

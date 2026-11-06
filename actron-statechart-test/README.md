@@ -39,6 +39,22 @@ implementation("io.github.roman-n1:actron-statechart-test:5.0.0-alpha.1")
 
 ## Quick start
 
+Drive the same screen definition used by the app, injecting a repository result and advancing virtual time:
+
+```kotlin
+@Test
+fun aQueryPublishesSearchResults() = runTest {
+    CitySearchMachine.create { emptyList() }.test(this, CitySearchState.Idle()) {
+        dispatch(CitySearchAction.ChangeQuery("London"))
+        expectState<CitySearchState.Debouncing>()
+        advanceTimeBy(350.milliseconds)
+        expectState<CitySearchState.Success>()
+    }
+}
+```
+
+### Driving a machine that declares commands
+
 ```kotlin
 @Test
 fun aLoad_fetches_andShowsTheContent() = runTest {
@@ -182,8 +198,8 @@ Zero or multiple matches fail with a diagnostic. Use `driver` for multi-result s
 effects, failure injection and other advanced controls. `allowPendingWork = true` explicitly
 allows ending a scenario with work still running; the scope is still closed afterwards.
 
-See executable Weather examples: `CitySearchScenarioTest` (debounce/success/error/clear/timeout)
-and `WeatherScenarioTest` (two parallel requests, selective completion and independent timeout).
+See executable Weather examples: `CitySearchScenarioTest` (debounce/success/error/clear)
+and `WeatherScenarioTest` (forecast and advice transitions, retry and dismissal).
 
 ## Generate scenarios from data, rules and goals
 
@@ -230,9 +246,8 @@ Its modes distinguish:
   This independently checks application guards when callbacks bypass command-result delivery.
 
 Late modes inject a result after a command is gone; they do not keep a cancelled request alive.
-Cancellation must also be asserted: Weather checks that a query edit removes the old command
-and emits its cancelled scope immediately, then separately verifies propagation through its
-real command handler/repository into Ktor MockEngine before the next debounce expires.
+Cancellation must also be asserted: Weather verifies that editing a query cancels the active entry and propagates cancellation
+through the repository to Ktor MockEngine before the next debounce expires.
 
 Each distinct reply per command, and each distinct detached reply, is offered once per path.
 The generator does not infer command completion, stream repetition, invoke routing or executor
@@ -261,8 +276,7 @@ goal("late-moscow-action") { steps ->
 ```
 
 The full Weather model also requires Kazan to succeed after that stale reply, checks that old
-revisions leave context unchanged, and explores both response orders of the parallel weather
-machine. See [GeneratedWeatherScenarios.kt](../examples/weather/src/commonTest/kotlin/actron/example/weather/GeneratedWeatherScenarios.kt).
+revisions leave the current search intact, and records a separate successful weather entry. See [GeneratedWeatherScenarios.kt](../examples/weather/debugTools/src/commonTest/kotlin/actron/example/weather/GeneratedWeatherScenarios.kt).
 
 The default target is every declared transition. Change `target` to require states, guard
 outcomes or custom obligations. Generation stops once the requested coverage and all goals
@@ -307,7 +321,7 @@ Import the file into the compatible application inspector to scrub the generated
 see its screens and highlighted graph. This is a **view-only recording**: it cannot continue
 execution, start HTTP or restore commands. The typed `MachineScenario` is the executable test
 artifact in memory/source; the exported JSON is its display artifact. Weather includes an
-[executable exporter](../examples/weather/src/jvmTest/kotlin/actron/example/weather/GeneratedRecordingFilesTest.kt).
+[executable exporter](../examples/weather/debugTools/src/jvmTest/kotlin/actron/example/weather/GeneratedRecordingFilesTest.kt).
 
 ## Temporal rules, executor schedules and mutation testing
 

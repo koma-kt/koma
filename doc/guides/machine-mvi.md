@@ -9,11 +9,11 @@ engine is internal; applications cannot install competing handwritten reducers.
 
 ```text
 UI / external producer ── action ──┐
-command handler ── result action ──┼─ queue → Machine.decide(current snapshot, input)
+entry coroutine ── result action ──┼─ queue → Machine.decide(current snapshot, input)
 timer ── timer input ──────────────┘                         │
                                                 one snapshot commit
                                                    │             │
-                                             StateFlow/UI    commands/timers
+                                             StateFlow/UI    entries/timers
 ```
 
 - Inputs are decided sequentially in acceptance order **within one machine**. Concurrent
@@ -23,7 +23,7 @@ timer ── timer input ──────────────┘          
   arbitrary state handlers, reducers, or recovery that can replace that snapshot.
 - State-local DSL handlers are branches of the same pure decision, not independent writers.
   Keep context immutable (including nested collections); the runtime cannot prevent mutation
-  through an application-owned mutable reference. Do not perform I/O in guards/reducers/hooks.
+  through an application-owned mutable reference. Keep guards and targets pure. Use suspend `onEnter` for repository calls.
 - Commands execute after commit, outside the processing lock. They may run concurrently;
   their result actions are processed sequentially against the then-current snapshot.
 - Activation/command identities reject results from commands no longer registered, including
@@ -39,15 +39,14 @@ machine definition, which can be replayed without coroutines:
 
 ```kotlin
 val store = MachineStore(
-    machine = machine,
-    context = initialState,
-    handler = handler,
-    scope = commandScope,
-    coroutineContext = Dispatchers.Main,
+    machine = CitySearchMachine.create(repository),
+    context = CitySearchState.Idle(),
+    scope = entryScope,
+    coroutineContext = Dispatchers.Default,
 )
 ```
 
-`coroutineContext` controls decisions and snapshot commits. `scope` controls command execution,
+`coroutineContext` controls decisions and snapshot commits. `scope` controls entry and command execution,
 timers and event delivery, and supplies their parent lifetime. They are separate contexts.
 Pass a scope with the desired command dispatcher; suspending network calls need not block
 Main, but blocking repositories must switch to a suitable dispatcher themselves.
@@ -100,32 +99,14 @@ MachineStore(machine, initial, handler, scope) {
 The example uses `actron.message.receiveMessages`; domain messages/actions are application types.
 Snapshot persistence, failure handlers and execution policies remain independent runtime options.
 
-## Request handlers
+## Repository calls and command handlers
 
-For one request type, return an action directly. The library handles result emission and
-cancellation, including a late response from a cancelled, non-cooperative request:
+Weather injects each repository into its screen machine. The Loading entry calls the
+repository, maps its result to an action and dispatches it. The Store cancels that entry on exit.
+See the [current weather machine](../../examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/currentweather/presentation/CurrentWeatherMachine.kt).
 
-```kotlin
-fun currentWeatherHandler(repository: WeatherRepository): CommandHandler<LoadCurrentWeather, CurrentWeatherAction> =
-    commandHandler(
-        onFailure = { _, _ -> CurrentWeatherAction.Failed("Weather request failed") },
-    ) { request ->
-        CurrentWeatherAction.Loaded(repository.load(request.city))
-    }
-```
-
-For several request types:
-
-```kotlin
-val handler = commandHandlers<WeatherCommand, WeatherAction> {
-    handle<WeatherCommand.Current>(
-        onFailure = { _, error -> WeatherAction.Unavailable(error.message ?: "Weather request failed") },
-    ) { request -> WeatherAction.Loaded(current.load(request.city)) }
-    handle<WeatherCommand.Hourly>(
-        onFailure = { _, error -> WeatherAction.ForecastFailed(error.message ?: "Could not load hourly forecast") },
-    ) { request -> WeatherAction.ForecastLoaded(hourly.load(request.city)) }
-}
-```
+For machines that explicitly model commands, `commandHandler` maps one command type and
+`commandHandlers` registers multiple types.
 
 Exactly one handler must match a command. Missing/overlapping registrations fail before
 executing the request; the scheduler reports this as a command failure. Routing is checked at

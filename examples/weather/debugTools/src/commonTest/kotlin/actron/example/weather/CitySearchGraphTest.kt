@@ -1,6 +1,5 @@
 package actron.example.weather
 
-import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.feature.cities.presentation.CitySearchAction
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.cities.presentation.CitySearchState
@@ -18,9 +17,9 @@ class CitySearchGraphTest {
     @Test
     fun graphContainsOnlyDeclaredBusinessEdges() {
         val edges = CitySearchMachine.create { awaitCancellation() }.chart.transitions
-        assertEquals(expected = 11, actual = edges.size)
+        assertEquals(expected = 10, actual = edges.size)
         assertEquals(expected = 2, actual = edges.count { it.trigger == Trigger.Eventless })
-        assertEquals(expected = 2, actual = edges.count { it.trigger is Trigger.After })
+        assertEquals(expected = 1, actual = edges.count { it.trigger is Trigger.After })
         val actions =
             edges.filter { it.trigger is Trigger.OnAction }.map { edge ->
                 val trigger = edge.trigger as Trigger.OnAction
@@ -74,13 +73,13 @@ class CitySearchGraphTest {
         )
 
     @Test
-    fun restoringLoadingPreservesRemainingTimeout() =
+    fun restoringLoadingKeepsTheRequestPending() =
         checkRestoration(
             elapsed = 8150.milliseconds,
-            remaining = 200.milliseconds,
+            remaining = 60_000.milliseconds,
             before = CitySearchState.Loading("Paris", 1),
-            after = CitySearchState.Error("Paris", 1, cause = RequestFailure.Timeout),
-            pendingEntries = 0,
+            after = CitySearchState.Loading("Paris", 1),
+            pendingEntries = 1,
         )
 
     private fun checkRestoration(

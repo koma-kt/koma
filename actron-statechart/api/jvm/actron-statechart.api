@@ -3428,6 +3428,7 @@ public final class actron/statechart/machine/ScreenMachineBuilder {
 public final class actron/statechart/machine/ScreenMachineKt {
 	public static final fun noCommandHandler ()Lactron/statechart/machine/CommandHandler;
 	public static final fun screenMachine-jlvHTy0 (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;Lkotlin/jvm/functions/Function1;)Lactron/statechart/machine/ScreenMachine;
+	public static final fun screenMachine-jlvHTy0 (Ljava/lang/String;Ljava/lang/String;Lkotlin/reflect/KClass;Lkotlin/jvm/functions/Function1;)Lactron/statechart/machine/ScreenMachine;
 }
 
 public final class actron/statechart/machine/ScreenStateBuilder {

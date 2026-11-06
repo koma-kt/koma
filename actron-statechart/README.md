@@ -1,15 +1,14 @@
 # actron-statechart
 
-For new MVI screens, start with the [typed state DSL](#state-types-shared-by-graph-ui-and-recordings)
-and [MachineStore threading and request handlers](../doc/guides/machine-mvi.md).
-The explicit-ID chart examples below document the lower-level API, which remains supported.
+For MVI screens, use the [screenMachine quick start](../README.md#1-a-store-for-a-counter).
+Declare a sealed screen state, handle actions with `on<Action> { target { ... } }`, and run
+repository calls in a cancellable `onEnter`. Each target supplies the complete next state.
+The [Weather example](../examples/weather/README.md) uses the same DSL across its five machines.
 
-## First: a phase is different from its data
+## Chart structure
 
-A search screen can be **Loading** while its context contains a query and selected contacts.
-Loading is a node because it owns a request and accepts particular actions. The query and
-selection are ordinary context fields, not extra nodes. The runtime combines active nodes
-with context into `MachineSnapshot<C>` for the UI.
+The lower-level chart API below also supports explicit node IDs, nested states and regions.
+A snapshot carries the current state and the active graph configuration.
 
 | Shape | Behaviour | Example |
 |---|---|---|
@@ -134,7 +133,7 @@ simulator arm64), JVM, JS and Wasm.
 
 Use the [typed counter](../README.md#1-a-store-for-a-counter) or
 [Weather's search machine](../examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt).
-`typedStateMachine` derives the graph from state types; `MachineStore` executes its decisions.
+`screenMachine` derives the graph from state types; `MachineStore` executes its decisions.
 For Decompose, [`retainedMachine`](../actron-decompose/README.md) owns creation, startup and cleanup.
 The standalone Store DSL and coroutine StateChartStore adapter are no longer application APIs.
 
@@ -288,8 +287,7 @@ charts retain `TransitionStructure.Explicit` and their existing coverage interpr
 results pass through the queue and are checked against their activation before replacing the
 whole state, so an obsolete coroutine cannot overwrite a newer snapshot. Resume restarts only
 unfinished entry bodies; history replay performs no I/O. Arbitrary Kotlin conditions do not
-declare a complete static reachable graph. Weather search now uses declared transitions; its other
-features still demonstrate behavior handlers. See the [Weather example](../examples/weather/docs/architecture.md).
+declare a complete static reachable graph. All five Weather machines use declared screen transitions. See the [Weather example](../examples/weather/docs/architecture.md).
 
 ## Replay-ready machine
 
@@ -661,9 +659,6 @@ state<CitySearchState.Loading> {
         guard { action -> action.revision == state.revision }
         target { action -> CitySearchState.Success(state.query, state.revision, action.results) }
     }
-    after(delay = 8.seconds, transition = {
-        target { CitySearchState.Error(state.query, state.revision, RequestFailure.Timeout) }
-    })
 }
 ```
 
@@ -684,7 +679,7 @@ The previous typed `after<Target>(delay) { ... }` overload is replaced by this d
 other typed operations and the behavior DSL remain available.
 
 The complete [city search machine](../examples/weather/shared/src/commonMain/kotlin/actron/example/weather/feature/cities/presentation/CitySearchMachine.kt)
-uses these rules for edits, results, debounce and timeout; `CitySearchGraphTest` checks the graph,
+uses these rules for edits, results and debounce; `CitySearchGraphTest` checks the graph,
 guard outcomes and restored deadlines.
 
 ## State types shared by graph, UI and recordings
@@ -694,11 +689,11 @@ When the complete screen state is one value, no context binding is needed:
 ```kotlin
 data class CounterState(val count: Int = 0)
 data object Increment : Action
-val counter = typedStateMachine<CounterState, Increment, Nothing, Nothing>(
+val counter = screenMachine<CounterState, Increment, Nothing>(
     DefinitionId("counter"), DefinitionVersion("1"), CounterState(),
 ) {
     state<CounterState> {
-        internal<Increment> { state, _ -> state.copy(count = state.count + 1) }
+        on<Increment> { target { state.copy(count = state.count + 1) } }
     }
 }
 ```
@@ -725,14 +720,14 @@ parallelStateMachine<Context, Action, Command, Event>(id, version) {
         writeState = { context, state: Current -> context.copy(current = state) },
     ) {
         state<Current.Idle> { /* typed transitions */ }
-        state<Current.Loading> { /* entry command, answers and timeout */ }
+        state<Current.Loading> { /* entry work and answers */ }
     }
     region("Hourly", initial = Hourly.Idle,
         readState = { it.hourly },
         writeState = { context, state: Hourly -> context.copy(hourly = state) },
     ) {
         state<Hourly.Idle> { /* typed transitions */ }
-        state<Hourly.Loading> { /* independent command and timeout */ }
+        state<Hourly.Loading> { /* independent entry work */ }
     }
 }
 ```

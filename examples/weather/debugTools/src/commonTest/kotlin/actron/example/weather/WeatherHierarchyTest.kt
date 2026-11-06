@@ -38,9 +38,9 @@ class WeatherHierarchyTest {
     @Test
     fun eachStandaloneChildStartsReadyWithoutRequestsOrTimers() {
         val city = demoCities.first()
-        assertReady(machine = CurrentWeatherMachine.create(), context = CurrentWeatherState.Ready(city = city))
-        assertReady(machine = HourlyForecastMachine.create(), context = HourlyForecastState.Ready(city = city))
-        assertReady(machine = WeatherAdviceMachine.create(), context = WeatherAdviceState.Ready(city = city))
+        assertReady(machine = CurrentWeatherMachine.create { kotlinx.coroutines.awaitCancellation() }, context = CurrentWeatherState.Ready(city = city))
+        assertReady(machine = HourlyForecastMachine.create { kotlinx.coroutines.awaitCancellation() }, context = HourlyForecastState.Ready(city = city))
+        assertReady(machine = WeatherAdviceMachine.create { kotlinx.coroutines.awaitCancellation() }, context = WeatherAdviceState.Ready(city = city))
     }
 
     @Test
@@ -172,7 +172,7 @@ class WeatherHierarchyTest {
 
     @Test
     fun adviceRejectsLateResultAfterItsOwnDismissAction() {
-        val machine = WeatherAdviceMachine.create()
+        val machine = WeatherAdviceMachine.create { kotlinx.coroutines.awaitCancellation() }
         val city = demoCities.first()
         val ready = machine.decide(snapshot = machine.initialSnapshot(context = WeatherAdviceState.Ready(city = city)), input = MachineInput.Start(now = MachineTime.Zero))
         val loading = machine.decide(snapshot = ready.snapshot, input = MachineInput.Dispatch(action = WeatherAdviceAction.Refresh, now = MachineTime.Zero))

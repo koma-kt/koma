@@ -2,12 +2,10 @@ package actron.example.weather
 
 import actron.example.weather.core.fixtures.demoCities
 import actron.example.weather.core.mvi.NoEvent
-import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherAction
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
-import actron.example.weather.feature.weather.domain.HourlyForecast
 import actron.example.weather.feature.weather.domain.WeatherReading
 import actron.example.weather.feature.weather.presentation.*
 import actron.statechart.test.*
@@ -15,10 +13,9 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 class WeatherMachinesCoverageTest {
-    private enum class Phase { Idle, Debouncing, Loading, Success, Error, TimeoutError }
+    private enum class Phase { Idle, Debouncing, Loading, Success, Error }
 
     private suspend fun MachineTestScenario<CitySearchState, CitySearchAction, Unit, NoEvent>.preparePhase(phase: Phase) {
         if (phase != Phase.Idle) dispatch(CitySearchAction.ChangeQuery("London"))
@@ -26,7 +23,6 @@ class WeatherMachinesCoverageTest {
         when (phase) {
             Phase.Success -> dispatch(CitySearchAction.Found(context.revision, emptyList()))
             Phase.Error -> dispatch(CitySearchAction.Failed(context.revision, "offline"))
-            Phase.TimeoutError -> advanceTimeBy(8.seconds)
             else -> Unit
         }
     }
@@ -87,7 +83,7 @@ class WeatherMachinesCoverageTest {
                     driver.receiveEvent<WeatherScreenEvent.RefreshChildren>()
                     dispatch(action = WeatherScreenAction.Refresh)
                     driver.receiveEvent<WeatherScreenEvent.RefreshChildren>()
-                    assertTrue(actual = driver.runningCommands.isEmpty())
+                    assertTrue(actual = driver.snapshot.pendingEntries.isEmpty())
                 })
                 .assertTransitionsCovered()
         })
@@ -101,7 +97,7 @@ class WeatherMachinesCoverageTest {
                 dispatch(CitySearchAction.ChangeQuery("Lo"))
                 advanceTimeBy(1.milliseconds)
                 expectState<CitySearchState.Debouncing>()
-                assertTrue(driver.runningCommands.isEmpty())
+                assertTrue(driver.snapshot.pendingEntries.isEmpty())
                 advanceTimeBy(349.milliseconds)
                 expectState<CitySearchState.Loading>()
                 val revision = context.revision
@@ -114,20 +110,26 @@ class WeatherMachinesCoverageTest {
         }
 
     @Test
-    fun currentRejectsOtherCityResultsAndRefreshCancelsItsOldCommand() =
+    fun currentRejectsOtherCityResultsAndRefreshCancelsItsOldEntry() =
         runTest(testBody = {
             val city = demoCities.first()
             val other = demoCities[1]
-            CurrentWeatherMachine.create().test(scope = this, initial = CurrentWeatherState.Ready(city = city), scenario = {
+            CurrentWeatherMachine.create { kotlinx.coroutines.awaitCancellation() }.test(scope = this, initial = CurrentWeatherState.Ready(city = city), scenario = {
                 dispatch(action = CurrentWeatherAction.Refresh)
-                val old = driver.runningCommands.single().id
+                val old =
+                    driver.snapshot.pendingEntries.values
+                        .single()
+                        .activation
                 dispatch(action = CurrentWeatherAction.Loaded(reading = WeatherReading(city = other, temperature = 1.0, feelsLike = 1.0, wind = 1.0, code = 0, time = "12:00")))
                 expectState<CurrentWeatherState.Loading>()
                 dispatch(action = CurrentWeatherAction.Refresh)
-                assertTrue(actual = old in driver.handler.cancelled)
-                assertEquals(expected = 1, actual = driver.runningCommands.size)
-                assertTrue(actual = driver.runningCommands.none { it.id == old })
-                advanceTimeBy(duration = 8.seconds)
+                assertTrue(
+                    actual =
+                        driver.snapshot.pendingEntries.values
+                            .single()
+                            .activation != old,
+                )
+                dispatch(CurrentWeatherAction.Failed("offline"))
                 expectState<CurrentWeatherState.Error>()
             })
         })

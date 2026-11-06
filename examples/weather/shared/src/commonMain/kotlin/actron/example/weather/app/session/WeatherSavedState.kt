@@ -4,6 +4,8 @@ import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
+import actron.example.weather.feature.weather.data.SampleHourlyRepository
+import actron.example.weather.feature.weather.data.SampleWeatherRepository
 import actron.example.weather.feature.weather.presentation.*
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceMachine
 import actron.statechart.machine.MachineClock
@@ -49,9 +51,9 @@ object WeatherSavedStateCodec {
                         },
                 )
             })
-            weatherPart(machine = CurrentWeatherMachine.create(), read = { it.current }, write = { cut, part -> cut.copy(current = part) })
-            weatherPart(machine = HourlyForecastMachine.create(), read = { it.hourly }, write = { cut, part -> cut.copy(hourly = part) })
-            weatherPart(machine = WeatherAdviceMachine.create(), read = { it.advice }, write = { cut, part -> cut.copy(advice = part) })
+            weatherPart(machine = CurrentWeatherMachine.create(SampleWeatherRepository), read = { it.current }, write = { cut, part -> cut.copy(current = part) })
+            weatherPart(machine = HourlyForecastMachine.create(SampleHourlyRepository), read = { it.hourly }, write = { cut, part -> cut.copy(hourly = part) })
+            weatherPart(machine = WeatherAdviceMachine.create(SampleWeatherRepository), read = { it.advice }, write = { cut, part -> cut.copy(advice = part) })
         }
 
     fun encode(history: WeatherSession): WeatherSavedState = WeatherSavedState(checkpoints = group.save(history.persistenceFrame()), branch = history.branch)

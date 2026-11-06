@@ -60,7 +60,7 @@ class HourlyForecastTest {
         }
 
     @Test
-    fun forecastCompletesWhileCurrentWeatherIsPending_andTimeoutIsIndependent() =
+    fun forecastCompletesWhileCurrentWeatherIsPending() =
         runTest {
             var cancelled = false
             val store =
@@ -78,13 +78,11 @@ class HourlyForecastTest {
                 store.start()
                 store.state.first { it.hourly is RequestState.Success }
                 assertEquals(RequestState.Loading, store.state.value.current)
-                store.state.first { it.current == RequestState.Error(cause = RequestFailure.Timeout) }
-                testScheduler.runCurrent()
-                assertTrue(cancelled)
-                assertTrue(store.state.value.hourly is RequestState.Success)
             } finally {
                 store.onDestroy()
             }
+            testScheduler.runCurrent()
+            assertTrue(cancelled)
         }
 
     @Test

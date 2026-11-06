@@ -5,19 +5,19 @@
 **Kotlin Multiplatform MVI with typed state machines.**
 
 Describe states, actions and transitions in Kotlin. Actron processes actions in order,
-publishes state, and runs commands such as network requests. The same machine definition
+publishes state, and runs suspending entry work such as network requests. The same machine definition
 supports diagrams, tests, recordings and replay.
 
-Start with three parts:
+A screen has three parts:
 
 | Part | Responsibility |
 |---|---|
-| `Machine` | State-local action handlers and declarations of state-owned entry work |
+| `screenMachine` | Declares the screen states, allowed transitions and cancellable entry work |
 | `MachineStore` | Queued execution, observable snapshots and command/timer lifetimes |
-| `CommandHandler` | I/O; returns actions to the machine |
+| Screen | Sends actions and renders the state published by the Store |
 
 The UI sends actions and reads `snapshot.context`. Only machine decisions change state.
-A command handler never writes state directly.
+An entry calls its repository and sends the result back with `dispatch`.
 
 [Quick start](#1-a-store-for-a-counter) · [Installation](#installation) ·
 [Requests](#requests-and-results) · [Weather demo](#see-the-state-behind-the-screen) ·
@@ -36,10 +36,11 @@ and dependency APIs are normalized at their boundaries; see the
 
 ## 1. A Store for a counter
 
-`behaviorStateMachine` declares handlers inside their state. Read the immutable `state` and
+`screenMachine` declares transitions inside each state. Read the immutable `state` and
 propose its replacement with `target`. No separate node IDs or reducer registration
 strings are needed.
 
+<!-- compiled-quick-start -->
 ```kotlin
 import actron.core.Action
 import actron.statechart.machine.*
@@ -52,17 +53,17 @@ sealed interface CounterAction : Action {
     data object Decrement : CounterAction
 }
 
-val counterMachine = behaviorStateMachine<CounterState, CounterAction, Nothing, Nothing>(
+val counterMachine = screenMachine<CounterState, CounterAction, Nothing>(
     id = DefinitionId("counter"),
     version = DefinitionVersion("1"),
     initial = CounterState(),
 ) {
     state<CounterState> {
         on<CounterAction.Increment> {
-            target(state = state.copy(count = state.count + 1))
+            target { state.copy(count = state.count + 1) }
         }
         on<CounterAction.Decrement> {
-            target(state = state.copy(count = (state.count - 1).coerceAtLeast(0)))
+            target { state.copy(count = (state.count - 1).coerceAtLeast(0)) }
         }
     }
 }
@@ -70,22 +71,21 @@ val counterMachine = behaviorStateMachine<CounterState, CounterAction, Nothing, 
 fun counterStore(scope: CoroutineScope) = MachineStore(
     machine = counterMachine,
     context = CounterState(),
-    handler = CommandHandler<Nothing, CounterAction> { _, _ -> },
     scope = scope,
-    coroutineContext = Dispatchers.Main, // Choose where decisions and commits run.
+    coroutineContext = Dispatchers.Default,
 )
 ```
 
 Create the Store once for its owner's lifetime. `store.dispatch(CounterAction.Increment)`
 queues an action and starts a lazy store; it does not wait for the new state. Collect
 `store.state` and render `snapshot.context.count`. Call `store.close()` when the owner is
-destroyed. `Nothing` means this machine has no commands or events.
+destroyed. `Nothing` means this machine emits no one-time events.
 
 For Compose, import `actron.compose.collectAsUiState` and `androidx.compose.runtime.getValue`.
 Inside a composable, `val snapshot by store.state.collectAsUiState()` collects on Main even
 if the machine processes on a background dispatcher. The platform must provide
 `Dispatchers.Main` and create its composition on the UI thread. This is independent of
-`scope`, which supplies the command execution context and lifetime.
+`scope`, which supplies the entry execution context and lifetime.
 
 The queue preserves acceptance order per machine. A single-thread dispatcher or Main also
 pins processing to one physical thread; Default/IO pools still process inputs sequentially,
@@ -103,32 +103,26 @@ uses this entry block in `Loading`:
 
 ```kotlin
 onEnter {
-    val result = try {
+    val result = runCatching {
         CitySearchAction.Found(state.revision, repository.search(state.query.trim()))
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (_: Exception) {
+    }.getOrElse { error ->
+        if (error is CancellationException || error !is Exception) throw error
         CitySearchAction.Failed(state.revision, "Could not load cities. Try again.")
     }
     dispatch(result)
 }
 ```
 
-The Store cancels the entry on exit. Its queued result carries the owning activation.
+The entry maps a repository exception to `Failed` and propagates cancellation. The Store cancels the entry on exit. Its queued result carries the owning activation.
 On restore, a pending entry restarts with its saved state. Use `event(...)` for one-time
 outputs such as requesting an animation. A screen with no such outputs can declare `NoEvent`.
 
 Command-based machines can use `commandHandler` or `commandHandlers` when command identity,
 queue policies or separate command handlers are part of the model.
 
-In the behavior DSL, `on<Action>` is synchronous and transactional; `onEnter` runs outside
-that transaction and may suspend. Use ordinary Kotlin conditions and `delay`. Entry work
-belongs to the state activation and is cancelled on exit. `state` stays the snapshot captured
-at handler entry; `target` does not mutate it. Even a same-state transition exits and
-re-enters, restarting entry work.
-
-See the [behavior DSL contract](actron-statechart/README.md#state-local-kotlin-behavior)
-and [request and threading contract](doc/guides/machine-mvi.md).
+Keep guards and targets synchronous. Use `after` for a deadline owned by the active state.
+On an external self-transition the Store exits the previous activation and starts a new entry.
+See the [request and threading contract](doc/guides/machine-mvi.md).
 
 ## Component lifetime
 
@@ -142,12 +136,12 @@ val store = componentContext.retainedMachine(
     key = "counter",
     machine = counterMachine,
     initial = CounterState(),
-    handler = CommandHandler<Nothing, CounterAction> { _, _ -> },
+    coroutineContext = Dispatchers.Default,
 )
 ```
 
-The InstanceKeeper owns the Store and its command scope. Component recreation reuses them;
-keeper destruction closes them. Handlers must not capture the old component or its lifecycle
+The InstanceKeeper owns the Store and its entry scope. Component recreation reuses them;
+keeper destruction closes them. Entry blocks must not capture the old component or its lifecycle
 scope. Recording and checkpoint restoration are optional parameters of the same call.
 See [Decompose integration](actron-decompose/README.md).
 
@@ -159,14 +153,14 @@ feature's behaviour.
 
 | Shape | Example | Actron representation |
 |---|---|---|
-| One state with changing data | A counter or an editable form | `behaviorStateMachine`, `on<Action>` and `target` |
-| Flat, mutually exclusive phases | Idle → Loading → Content or Error | `typedStateMachine`; `on<Action> { target { ... } }` declares each graph edge |
+| One state with changing data | A counter or an editable form | `screenMachine`, `on<Action>` and `target` |
+| Flat, mutually exclusive phases | Idle → Loading → Content or Error | `screenMachine`; `on<Action> { target { ... } }` declares each graph edge |
 | Hierarchical phases | Connected contains Idle and ChatOpen | `compound<Parent>`; one active child at a time |
 | Parallel phases | Connection status and upload status evolve independently | `parallelStateMachine` regions, or nested `parallel<Parent>` |
 | Return to a previous substate | Resume an interrupted multi-step editor | `history()` / `history(deep = true)` and `onHistory<Action, Parent>()` |
-| Timed work | Debounce or request timeout | Suspend `onEnter` with coroutine delay/timeout; explicit charts also offer `after(delay) { target { ... } }` |
+| Timed work | Debounce a search query | `after(delay) { target { ... } }` |
 
-Keep changing data such as queries and counters in context fields. Use distinct states when
+Keep changing data such as queries and counters in state fields. Use distinct states when
 allowed actions or work lifetimes change. The typed DSL derives graph IDs from state types;
 there is no separate phase-to-ID map. See the [typed DSL guide](actron-statechart/README.md#state-types-shared-by-graph-ui-and-recordings)
 for explicit graph declarations, shared context bindings, hierarchy and history.
@@ -180,9 +174,6 @@ state<CitySearchState.Loading> {
     on<CitySearchAction.Found> {
         guard { action -> action.revision == state.revision }
         target { action -> CitySearchState.Success(state.query, state.revision, action.results) }
-    }
-    after(8.seconds) {
-        target { CitySearchState.Error(state.query, state.revision, RequestFailure.Timeout) }
     }
 }
 ```
@@ -212,8 +203,8 @@ must own a child workflow in one atomic snapshot.
 A StateChart `Machine` defines behavior; `MachineStore` executes it and exposes `MachineSnapshot<C>`.
 
 The decision engine takes a snapshot and an input and returns a `Decision`. Commands, timer
-changes and effects are data in that decision. `MachineStore` commits it, then a
-`CommandHandler` performs I/O and sends results back as new inputs.
+changes and effects are data in that decision. After commit, the Store runs the destination’s
+entry block. Its result action goes through the same queue as a UI action.
 
 The counter above can also run without coroutines:
 
@@ -261,7 +252,7 @@ The inspector is reusable through [actron-timetravel-compose](actron-timetravel-
 
 Viewing history renders saved frames without repeating network calls. **Continue here**
 restores a compatible checkpoint and starts a new continuation. City search retains the remaining
-debounce and timeout duration; an unfinished HTTP request starts again. Other Weather features
+debounce duration; an unfinished HTTP request starts again. Other Weather features
 restart unfinished behavior entry work from its beginning. Later history is replaced. The host restores
 navigation. **Export** shares a recording; **Import** opens it in view-only mode.
 See [Weather's restoration and replay contract](examples/weather/README.md#session-history-and-replay).

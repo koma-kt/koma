@@ -8,7 +8,6 @@ import actron.example.weather.feature.currentweather.presentation.CurrentWeather
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
 import actron.example.weather.feature.weather.domain.*
 import actron.example.weather.feature.weather.presentation.*
-import actron.statechart.Trigger
 import actron.statechart.machine.*
 import actron.statechart.test.*
 import kotlinx.coroutines.awaitCancellation
@@ -24,39 +23,37 @@ class AdvancedWeatherTestingTest {
 
     private fun reading(city: actron.example.weather.core.domain.City) = WeatherReading(city, 12.0, 10.0, 3.0, 0, "2026-10-20T12:00")
 
-    @Test fun searchLeavesLoadingWithinItsTimeoutIncludingCancellation() =
+    @Test fun searchWaitsForRepositoryUntilQueryIsCleared() =
         runTest {
             CitySearchMachine.create { awaitCancellation() }.test(scope = this, initial = CitySearchState.Idle()) {
                 dispatch(action = CitySearchAction.ChangeQuery(query = kazan.name))
                 advanceTimeBy(duration = 350.milliseconds)
                 expectState<CitySearchState.Loading>()
-                advanceTimeBy(duration = 7999.milliseconds)
+                advanceTimeBy(duration = 60.seconds)
                 expectState<CitySearchState.Loading>()
-                advanceTimeBy(duration = 1.milliseconds)
-                assertEquals(expected = RequestFailure.Timeout, actual = expectState<CitySearchState.Error>().cause)
-                assertTrue(actual = driver.runningCommands.isEmpty())
+                dispatch(CitySearchAction.ChangeQuery(""))
+                expectState<CitySearchState.Idle>()
+                assertTrue(actual = driver.snapshot.pendingEntries.isEmpty())
             }
         }
 
-    @Test fun actualCurrentExecutorExploresResultFailureAndTimeout() =
+    @Test fun actualCurrentExecutorExploresResultAndFailure() =
         runTest(testBody = {
             val report =
-                CurrentWeatherMachine.create().exploreSchedules(
+                CurrentWeatherMachine.create { kotlinx.coroutines.awaitCancellation() }.exploreSchedules(
                     initial = CurrentWeatherState.Ready(city = kazan),
                     scope = this,
                     maxDepth = 1,
                     maxRuns = 20,
                     setup = { send(action = CurrentWeatherAction.Refresh) },
                     choices = {
-                        if (runningCommands.isEmpty()) {
-                            emptyList()
+                        if (snapshot.context is CurrentWeatherState.Loading) {
+                            listOf(
+                                ScheduleOperation.Send(CurrentWeatherAction.Loaded(reading(kazan))),
+                                ScheduleOperation.Send(CurrentWeatherAction.Failed("offline")),
+                            )
                         } else {
-                            runningCommands.flatMap { command ->
-                                listOf(
-                                    ScheduleOperation.Answer(command = command.id, action = CurrentWeatherAction.Loaded(reading = reading(city = kazan))),
-                                    ScheduleOperation.Answer(command = command.id, action = CurrentWeatherAction.Failed(message = "offline")),
-                                )
-                            } + ScheduleOperation.Advance(duration = 8.seconds)
+                            emptyList()
                         }
                     },
                     check = {
@@ -65,7 +62,7 @@ class AdvancedWeatherTestingTest {
                     },
                 )
             report.assertSuccess()
-            assertEquals(expected = 3, actual = report.completed.size)
+            assertEquals(expected = 2, actual = report.completed.size)
         })
 
     @Test fun actualSearchExecutorExploresAnswerBeforeAndAfterQueryReplacement() =
@@ -102,7 +99,7 @@ class AdvancedWeatherTestingTest {
 
     @Test fun currentWeatherRejectsOtherCityThenAcceptsItsOwnCity() =
         runTest {
-            CurrentWeatherMachine.create().test(scope = this, initial = CurrentWeatherState.Ready(city = kazan)) {
+            CurrentWeatherMachine.create { kotlinx.coroutines.awaitCancellation() }.test(scope = this, initial = CurrentWeatherState.Ready(city = kazan)) {
                 dispatch(action = CurrentWeatherAction.Refresh)
                 dispatch(action = CurrentWeatherAction.Loaded(reading = reading(city = moscow)))
                 expectState<CurrentWeatherState.Loading>()
