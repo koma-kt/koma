@@ -23,12 +23,15 @@ flowchart LR
 For search, the concrete chain is:
 
 1. `CitySearchScreen` emits `CitySearchIntent.QueryChanged`.
-2. `DefaultCitySearchComponent.onUiEvent` maps it to `CitySearchAction.ChangeQuery` and calls
-   `store.dispatch`. It never assigns the feature state itself.
+2. The presentation mapper translates the intent into `CitySearchAction.ChangeQuery`;
+   `DefaultCitySearchComponent.onUiEvent` executes the resulting dispatch command. It never
+   assigns the feature state itself.
 3. `MachineStore` processes the input sequentially against its current snapshot. The machine
    returns updated data, state transitions and descriptions of commands/timers to execute.
 4. The Loading entry calls `repository.search` and dispatches `Found` or `Failed` through the queue.
-5. Compose renders the current `CitySearchState` from the collected snapshot.
+5. The component exposes `StateFlow<CitySearchUiState>`, projected from the Store by the
+   presentation mapper. Compose renders that UI model without seeing `MachineSnapshot` or
+   `CitySearchState`.
 
 The root runs stores and their entry coroutines on `Dispatchers.Default`. Navigation and UI collection run on Main.
 The host can override `machineContext` and `uiContext` independently. Suspending search runs in the entry coroutine;
@@ -51,8 +54,10 @@ Start with [CitySearchMachine.kt](../shared/src/commonMain/kotlin/actron/example
 | `after(delay = ..., transition = { ... })` | Declares an activation-owned debounce |
 | `onEnter { ... }` | Calls the repository after commit and dispatches a typed result |
 
-The screen renders the current `CitySearchState` directly. Its variant selects the graph node.
-`Success` carries the results and `Error` carries the cause. Saved sessions and recordings serialize the sealed state directly.
+The machine context variant selects the graph node. `Success` carries the results and `Error`
+carries the cause. The component maps those variants to `CitySearchUiState`; the screen renders
+prepared messages, controls and result rows. Saved sessions and recordings serialize the sealed
+machine state directly.
 `MachineSnapshot` adds runtime configuration, revision and command/timer identities around the
 context. The context's search `revision` identifies the query generation; it is distinct from
 that runtime snapshot revision.
@@ -119,7 +124,8 @@ heat >=30°C and cold <=-10°C are demo thresholds. Labels and tips use native E
 
 A group route delivers `MachineInput.BridgeReceived` with the sender/effect MessageId. Each Store
 has its own serialized queue, entries and timers: three deliveries are not one atomic decision.
-UI combines immutable snapshots; `WeatherContext` is a derived view, not another mutable owner.
+`WeatherMachines` combines immutable snapshots into `WeatherContext`, a derived view rather
+than another mutable owner. The component projects it into `CityWeatherUiState` before UI access.
 WeatherCheckpoints projects all four checkpoints plus in-flight delivery identities. Parent
 observers mark committed routing intents before the group delivers them; child observers then
 project the group's actual remaining messages. Frames with deliveries in flight cannot be
@@ -298,3 +304,20 @@ calls its repository and dispatches Loaded or Failed. A restored Loading entry s
 
 The parent now uses definition version 12 and the three loaders use version 5. Weather starts
 fresh when a saved checkpoint belongs to an incompatible machine definition.
+
+## Presentation boundaries
+
+Both feature components expose UI models: `CitySearchComponent.state` contains
+`CitySearchUiState`, and `CityWeatherComponent.state` contains `CityWeatherUiState`.
+Their read-only StateFlow projections read current sources for `value`/`replayCache`,
+map subscriptions and suppress equal UI models. They introduce no writable state or
+sharing scope; cancelling a UI collector releases its subscriptions without closing a
+retained machine.
+
+The weather projection covers the screen parent and all three child machines: current
+weather, hourly forecast and advice. `WeatherContext`, machine phases, revisions and
+technical failures remain behind the component boundary. Forecast cards receive prepared
+text; the mapper parses update timestamps, and Compose resolves locale-dependent resources.
+Screen intents are mapped back to the owning machine or to navigation news; components
+only execute the mapped commands. Debug previews use the same mappers with read-only
+controls. Recording and restoration retain their machine snapshots and formats.

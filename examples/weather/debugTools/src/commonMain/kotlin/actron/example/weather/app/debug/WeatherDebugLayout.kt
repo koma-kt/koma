@@ -12,6 +12,7 @@ import actron.example.weather.debug.resources.retention
 import actron.example.weather.debug.resources.settings
 import actron.example.weather.feature.cities.presentation.CitySearchControls
 import actron.example.weather.feature.cities.presentation.CitySearchScreen
+import actron.example.weather.feature.cities.presentation.toUiState
 import actron.example.weather.feature.weather.presentation.CityWeatherScreen
 import actron.example.weather.feature.weather.presentation.toUiState
 import actron.timetravel.compose.HistoryContinuation
@@ -47,8 +48,8 @@ fun WeatherDebugLayout(
                 when (val route = frame.route) {
                     WeatherRoute.Search -> {
                         CitySearchScreen(
-                            frame.search.snapshot.context,
-                            controls = CitySearchControls.ReadOnly,
+                            frame.search.snapshot.context
+                                .toUiState(CitySearchControls.ReadOnly),
                             onIntent = {},
                             settingsAction = { WeatherSettingsButton(settings::open) },
                         )

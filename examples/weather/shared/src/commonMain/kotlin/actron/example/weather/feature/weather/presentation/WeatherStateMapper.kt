@@ -2,8 +2,10 @@ package actron.example.weather.feature.weather.presentation
 
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.core.presentation.WeatherText
+import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastAction
 import actron.example.weather.feature.weather.domain.HourlyForecast
 import actron.example.weather.feature.weather.domain.WeatherAdvice
+import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceAction
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdvicePhase
 import actron.example.weather.resources.Res
 import actron.example.weather.resources.advice_cold
@@ -22,10 +24,13 @@ import actron.example.weather.resources.forecast_failed
 import actron.example.weather.resources.forecast_ready
 import actron.example.weather.resources.loading_forecast
 import actron.example.weather.resources.loading_weather
+import actron.example.weather.resources.rain
 import actron.example.weather.resources.temperature
 import actron.example.weather.resources.unknown_temperature
 import actron.example.weather.resources.weather_failed
 import actron.example.weather.resources.weather_ready
+import actron.example.weather.resources.wind
+import kotlin.time.Instant
 
 fun WeatherContext.toUiState(enabled: Boolean): CityWeatherUiState {
     val data = this
@@ -67,8 +72,16 @@ fun WeatherContext.toUiState(enabled: Boolean): CityWeatherUiState {
         city = city.name,
         temperature = temperature,
         detail = detail,
-        updatedAt = updatedAt,
-        forecast = forecast,
+        updatedAt = updatedAt.toUpdateUiModels(),
+        forecast =
+            forecast.map { hour ->
+                ForecastHourUiModel(
+                    time = hour.time.substringAfter('T'),
+                    temperature = WeatherText(Res.string.temperature, listOf(kotlin.math.round(hour.temperature).toInt())),
+                    wind = WeatherText(Res.string.wind, listOf(kotlin.math.round(hour.wind).toInt())),
+                    rain = WeatherText(Res.string.rain, listOf(hour.rainChance)),
+                )
+            },
         forecastStatus = forecastStatus(state = hourly),
         forecastFailed = hourly is RequestState.Error,
         enabled = enabled,
@@ -126,3 +139,42 @@ private fun forecastStatus(state: RequestState<HourlyForecast>): List<WeatherTex
         RequestState.Ready -> listOf(WeatherText(resource = Res.string.forecast_ready))
         RequestState.Idle -> listOf(WeatherText(resource = Res.string.choose_city))
     }
+
+/** Routes UI intentions without coupling rendering to a particular machine or bridge. */
+internal sealed interface CityWeatherUiCommand {
+    data class Screen(
+        val action: WeatherScreenAction,
+    ) : CityWeatherUiCommand
+
+    data class Forecast(
+        val action: HourlyForecastAction,
+    ) : CityWeatherUiCommand
+
+    data class Advice(
+        val action: WeatherAdviceAction,
+    ) : CityWeatherUiCommand
+
+    data class Publish(
+        val news: CityWeatherComponent.News,
+    ) : CityWeatherUiCommand
+}
+
+internal fun CityWeatherIntent.toCommand(): CityWeatherUiCommand =
+    when (this) {
+        CityWeatherIntent.DismissAdvice -> CityWeatherUiCommand.Advice(WeatherAdviceAction.Dismiss)
+        CityWeatherIntent.RetryAdvice -> CityWeatherUiCommand.Advice(WeatherAdviceAction.Retry)
+        CityWeatherIntent.Refresh -> CityWeatherUiCommand.Screen(WeatherScreenAction.Refresh)
+        CityWeatherIntent.RetryForecast -> CityWeatherUiCommand.Forecast(HourlyForecastAction.Retry)
+        CityWeatherIntent.Back -> CityWeatherUiCommand.Publish(CityWeatherComponent.News.BackClicked)
+    }
+
+private fun String.toUpdateUiModels(): List<WeatherUpdateUiModel> {
+    if (isEmpty()) return emptyList()
+    val update =
+        try {
+            WeatherUpdateUiModel.Timestamp(Instant.parse(this))
+        } catch (_: IllegalArgumentException) {
+            WeatherUpdateUiModel.Literal(this)
+        }
+    return listOf(update)
+}

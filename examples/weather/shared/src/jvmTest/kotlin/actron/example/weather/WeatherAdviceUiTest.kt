@@ -40,7 +40,7 @@ class WeatherAdviceUiTest {
         runComposeUiTest(block = {
             val intents = mutableListOf<CityWeatherIntent>()
             val context = WeatherContext(city = City(name = "London", latitude = 51.5, longitude = -0.1), advice = WeatherAdvicePhase.Visible(items = listOf(WeatherAdvice.Umbrella, WeatherAdvice.SlipperyRoads)))
-            setContent(composable = { CityWeatherScreen(state = context.toUiState(enabled = true), onIntent = { intents.add(element = it) }) })
+            setContent(composable = { CityWeatherScreen(uiState = context.toUiState(enabled = true), onIntent = { intents.add(element = it) }) })
             onNodeWithTag(testTag = "weather-header").assertExists()
             onNodeWithTag(testTag = "weather-city").assertTextContains(value = "Weather — London")
             onNodeWithText(text = "It is raining — take an umbrella.").assertExists()
@@ -55,7 +55,7 @@ class WeatherAdviceUiTest {
         runComposeUiTest(block = {
             val intents = mutableListOf<CityWeatherIntent>()
             val context = WeatherContext(city = City(name = "London", latitude = 51.5, longitude = -0.1), advice = WeatherAdvicePhase.Error(cause = RequestFailure.Unavailable("offline")))
-            setContent(composable = { CityWeatherScreen(state = context.toUiState(enabled = true), onIntent = { intents.add(element = it) }) })
+            setContent(composable = { CityWeatherScreen(uiState = context.toUiState(enabled = true), onIntent = { intents.add(element = it) }) })
             onNodeWithTag(testTag = "advice-retry").performClick()
             onNodeWithTag(testTag = "advice-dismiss").performClick()
             assertEquals(expected = listOf(CityWeatherIntent.RetryAdvice, CityWeatherIntent.DismissAdvice), actual = intents)

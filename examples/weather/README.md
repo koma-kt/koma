@@ -79,8 +79,10 @@ Desktop. The old article, replay and CLI-check modes have been removed from this
 - **Actron** owns each feature's `MachineStore`, state, transitions, timers, entry work
   and cancellation. Search and weather have independent stores; weather has a screen parent and three independent child stores.
 - **Loading entries** call feature repositories and dispatch result actions. The Store cancels an entry when its state exits.
-- **Compose** reads the machine snapshot and sends screen intents. UI models are pure formatting
-  projections, never independent mutable stores.
+- **Presentation mappers** project machine snapshots into immutable UI models and translate screen
+  intents into machine inputs or navigation news. Components execute those commands.
+- **Compose** renders UI models and sends screen intents. UI models are projections, never
+  independent mutable stores; machine phases, revisions and failures stay outside rendering.
 
 The root does not copy feature states or forward search/refresh requests. Each feature handles
 its own intents. The KMP-style parent/child bridge carries navigation news only. No parent-to-child
@@ -261,8 +263,9 @@ that the running app has not loaded yet. Normal exit removes the snapshot.
 
 The root gives its stores a shared sequential dispatcher on `Dispatchers.Default` and runs navigation on
 `Dispatchers.Main`. Supply `machineContext` and `uiContext` at root creation to override these defaults.
-Search calls the repository directly in its cancellable Loading entry. Both screens collect state
-on Main with `collectAsUiState`. See the [threading contract](../../doc/guides/machine-mvi.md).
+Search calls the repository directly in its cancellable Loading entry. Both feature components expose read-only UI-model StateFlows, and both screens collect those
+on Main with `collectAsUiState`. Machine snapshots and the weather aggregate stay behind the
+presentation boundary. See the [threading contract](../../doc/guides/machine-mvi.md).
 
 ## Share a view-only recording
 

@@ -7,6 +7,7 @@ import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.presentation.CitySearchScreen
 import actron.example.weather.feature.cities.presentation.CitySearchState
+import actron.example.weather.feature.cities.presentation.toUiState
 import actron.example.weather.feature.weather.domain.ForecastHour
 import actron.example.weather.feature.weather.domain.HourlyForecast
 import actron.example.weather.feature.weather.domain.WeatherAdvice
@@ -42,14 +43,14 @@ class WeatherLocalizationTest {
             )) {
                 Locale.setDefault(Locale.forLanguageTag(expectation.language))
                 runComposeUiTest {
-                    setContent { MaterialTheme { CityWeatherScreen(state = weather, onIntent = {}) } }
+                    setContent { MaterialTheme { CityWeatherScreen(uiState = weather, onIntent = {}) } }
                     onNodeWithText(text = expectation.header).assertExists()
                     onNodeWithText(text = expectation.advice).assertExists()
                     onNodeWithText(text = expectation.detail).assertExists()
                     onNodeWithText(text = expectation.rain).assertExists()
                 }
                 runComposeUiTest {
-                    setContent { MaterialTheme { CitySearchScreen(state = search, onIntent = {}) } }
+                    setContent { MaterialTheme { CitySearchScreen(uiState = search.toUiState(), onIntent = {}) } }
                     onNodeWithText(text = expectation.failure).assertExists()
                 }
             }
