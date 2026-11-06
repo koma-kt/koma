@@ -48,7 +48,7 @@ Start with [CitySearchMachine.kt](../shared/src/commonMain/kotlin/actron/example
 | `state<T>` | Declares a graph node and its transitions |
 | `on<Action> { guard; target }` | Declares one action edge; destination comes from target's return type |
 | `always(transition = { ... })` | Chooses the next phase without another input |
-| `after(delay = ..., transition = { ... })` | Declares an activation-owned debounce or timeout |
+| `after(delay = ..., transition = { ... })` | Declares an activation-owned debounce |
 | `onEnter { ... }` | Calls the repository after commit and dispatches a typed result |
 
 The screen renders the current `CitySearchState` directly. Its variant selects the graph node.
@@ -75,11 +75,11 @@ The choice settles in the same decision: the history records both edges, and the
 Idle or Debouncing. Each stable state declares its own `ChangeQuery → QueryChanged` edge.
 
 The second edit updates the query/revision and exits the old `Loading` activation. Its entry coroutine
-and timeout are cancelled immediately, before the next debounce expires. Further edits restart
+is cancelled immediately, before the next debounce expires. Further edits restart
 the debounce. Clearing enters `Idle`, with no pending search and no displayed results.
 
 The new `Loading.onEnter` calls the injected repository directly.
-`after(8.seconds)` declares the timeout edge; state exit cancels the timer and repository request. Timeout enters `Error(cause = RequestFailure.Timeout)`. Request failure uses the same Error state with an Unavailable cause; the UI offers the same retry action.
+The HTTP client owns the request deadline. A repository failure enters the retryable Error state.
 The entry rethrows cancellation so it reaches the suspended repository call.
 
 Entry activation checks and the `Found`/`Failed` revision guards are an additional defense
@@ -89,7 +89,7 @@ injects an old result does not mean Weather intentionally leaves obsolete reques
 ### Four independent weather machines
 
 [CityWeatherMachine.kt](../shared/src/commonMain/kotlin/actron/example/weather/feature/weather/presentation/CityWeatherMachine.kt)
-owns the city header and accepts only `WeatherScreenAction.Refresh`. Its Active entry emits one
+owns the city header and accepts only `WeatherScreenAction.Refresh`. Its `WeatherScreenState` entry emits one
 `WeatherScreenEvent.RefreshChildren`, both on fresh Start and on the Refresh self-loop.
 It has no child action imports, repository calls or loading state.
 
@@ -101,16 +101,16 @@ without commands or timers before their own routed Refresh starts loading:
 | Definition | Own public inputs | Work |
 | --- | --- | --- |
 | `city-weather` | WeatherScreenAction.Refresh | Emits RefreshChildren |
-| `current-weather` | CurrentWeatherAction.Refresh / Loaded / Failed | LoadCurrentWeather |
-| `hourly-forecast` | HourlyForecastAction.Refresh / Retry / Loaded / Failed | LoadHourlyForecast |
-| `weather-advice` | WeatherAdviceAction.Refresh / Retry / Dismiss / Loaded / Failed | LoadWeatherAdvice |
+| `current-weather` | CurrentWeatherAction.Refresh / Loaded / Failed | Calls WeatherRepository.load |
+| `hourly-forecast` | HourlyForecastAction.Refresh / Retry / Loaded / Failed | Calls HourlyForecastRepository.load |
+| `weather-advice` | WeatherAdviceAction.Refresh / Retry / Dismiss / Loaded / Failed | Loads weather and computes advice |
 
 The three routes map the same parent event to three different action types. The children know
 neither the screen nor one another. Current and Hourly each have Ready/Loading/Success/Error;
 Refresh works from all four states. Hourly also accepts its own Retry from each state.
 Advice has Ready/Loading/Hidden/Visible/Dismissed/Error; Refresh works from all six. Dismiss
 from Loading, Visible or Error cancels only its own work. Retry from Error reloads only Advice.
-Cancelled command identities reject late answers; each machine also guards its selected city.
+Entry activation identities reject late answers; each machine also guards its selected city.
 
 Advice calls the same WeatherRepository dependency as Current, but owns a separate request and
 interprets the reading. Each global refresh makes two current-weather calls and one hourly call.
@@ -118,7 +118,7 @@ WMO precipitation codes follow [Open-Meteo](https://open-meteo.com/en/docs); win
 heat >=30°C and cold <=-10°C are demo thresholds. Labels and tips use native EN/RU XML resources.
 
 A group route delivers `MachineInput.BridgeReceived` with the sender/effect MessageId. Each Store
-has its own serialized queue, commands and timers: three deliveries are not one atomic decision.
+has its own serialized queue, entries and timers: three deliveries are not one atomic decision.
 UI combines immutable snapshots; `WeatherContext` is a derived view, not another mutable owner.
 WeatherCheckpoints projects all four checkpoints plus in-flight delivery identities. Parent
 observers mark committed routing intents before the group delivers them; child observers then
@@ -165,8 +165,8 @@ The host supplies field projections and a `WeatherHistoryFrame`; Actron does not
 Selecting a history entry renders its saved data without running commands. Continuing from a
 resumable live entry calls the root's `continueFrom`: it replaces the Decompose children and
 recreates executors from their checkpoints. Pending read requests restart; completed reads stay
-completed. Search v15 preserves the remaining debounce and request-timeout duration.
-The other weather machines still restart their unfinished entry bodies and timeout on resume. This does not restore a suspended call stack or
+completed. Search v16 preserves the remaining debounce duration.
+The other weather machines still restart their unfinished entry bodies on resume. This does not restore a suspended call stack or
 guarantee exactly-once external side effects. Later history is removed after successful continuation.
 
 [WeatherSavedState.kt](../shared/src/commonMain/kotlin/actron/example/weather/app/session/WeatherSavedState.kt)
@@ -249,6 +249,7 @@ val store = componentContext.retainedMachine(
     key = "city-search",
     machine = CitySearchMachine.create(repository),
     initial = CitySearchState.Idle(),
+    coroutineContext = machineContext,
 )
 ```
 
@@ -273,26 +274,27 @@ Handlers/options must not retain a component, bridge endpoint or UI-lifecycle sc
 Weather starts its children before its screen parent. A fresh parent emits RefreshChildren on
 entry; resuming its already-started checkpoint skips entry hooks. No startup Refresh is dispatched
 over restored children. Existing completed regions are not refreshed by
-host recreation or continuation. Destroying the keeper closes the Store and cancels its commands.
+host recreation or continuation. Destroying the keeper closes the Store and cancels its entries.
 
 A single `actron-decompose` module exposes the standard machine/Store integration. It depends
 on core/statechart and Decompose, and has no time-travel, persistence-codec or Compose dependency.
 
-## Declared search transitions and behavior handlers
+## Declared screen transitions
 
-Search v15 uses `screenMachine` with `guard / target` declarations. Its eleven
-edges include actions, two automatic choices and two timers. The graph is available before
+Search v16 uses `screenMachine` with `guard / target` declarations. Its ten
+edges include actions, two automatic choices and one debounce timer. The graph is available before
 execution; rejected and accepted guards are recorded by the same engine that chooses transitions.
 `target` infers the destination type from its factory, so Success is not written twice.
 Each target carries the current query and revision into the next state. Only a query edit advances the revision.
 
-This changes search continuation from v12: debounce and timeout retain their remaining delay,
+This changes search continuation from v12: debounce retains its remaining delay,
 and QueryChanged settles within the edit decision instead of publishing a separate entry result.
-Definition version 15 resumes unfinished entry work and rejects earlier city-search checkpoints.
+Definition version 16 resumes unfinished entry work and rejects earlier city-search checkpoints.
 HTTP remains restartable read work, not a saved coroutine stack. `CitySearchGraphTest` verifies
 restoration, graph edges and both outcomes of response guards.
 
-Other Weather features retain `behaviorStateMachine`, suspend `onEnter` and complete-snapshot
-`target`. Those handlers support ordinary Kotlin control flow and use a conservative graph
-envelope. Their unfinished entry work restarts from the beginning on continuation. Both APIs use
-the same StateChart engine, immutable snapshots, command handling and queued Store.
+The weather screen and its three feature machines also use `screenMachine`. Each Loading entry
+calls its repository and dispatches Loaded or Failed. A restored Loading entry starts a fresh repository call. The parent’s entry emits RefreshChildren.
+
+The parent now uses definition version 12 and the three loaders use version 5. Weather starts
+fresh when a saved checkpoint belongs to an incompatible machine definition.

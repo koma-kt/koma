@@ -8,14 +8,10 @@ import actron.example.weather.app.session.WeatherSession
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherAction
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
-import actron.example.weather.feature.currentweather.presentation.LoadCurrentWeather
-import actron.example.weather.feature.currentweather.presentation.currentWeatherHandler
 import actron.example.weather.feature.currentweather.presentation.toRequestState
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastAction
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastState
-import actron.example.weather.feature.hourlyforecast.presentation.LoadHourlyForecast
-import actron.example.weather.feature.hourlyforecast.presentation.hourlyForecastHandler
 import actron.example.weather.feature.hourlyforecast.presentation.toRequestState
 import actron.example.weather.feature.weather.domain.HourlyForecastRepository
 import actron.example.weather.feature.weather.domain.WeatherRepository
@@ -24,20 +20,18 @@ import actron.example.weather.feature.weather.presentation.WeatherContext
 import actron.example.weather.feature.weather.presentation.WeatherScreenAction
 import actron.example.weather.feature.weather.presentation.WeatherScreenEvent
 import actron.example.weather.feature.weather.presentation.WeatherScreenState
-import actron.example.weather.feature.weatheradvice.presentation.LoadWeatherAdvice
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceAction
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceMachine
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceState
 import actron.example.weather.feature.weatheradvice.presentation.toAdvicePhase
-import actron.example.weather.feature.weatheradvice.presentation.weatherAdviceHandler
 import actron.observability.StoreInstanceId
 import actron.statechart.machine.BridgeMessage
-import actron.statechart.machine.CommandHandler
 import actron.statechart.machine.ExecutorCheckpoint
-import actron.statechart.machine.Machine
 import actron.statechart.machine.MachineGroup
 import actron.statechart.machine.MachineStore
 import actron.statechart.machine.MessageId
+import actron.statechart.machine.ScreenMachine
+import actron.statechart.machine.noCommandHandler
 import actron.statechart.machine.resumeMachineStore
 import actron.timetravel.RecordedStep
 import com.arkivanov.essenty.instancekeeper.InstanceKeeper
@@ -65,17 +59,17 @@ class WeatherMachines(
     private val scope = CoroutineScope(context = coroutineContext + SupervisorJob())
     private val group = MachineGroup()
     private val closeStores = mutableListOf<() -> Unit>()
-    private val screenMember = group.member<WeatherScreenState, WeatherScreenAction, actron.example.weather.core.mvi.NoCommand, WeatherScreenEvent>(id = StoreInstanceId(value = "weather-screen"))
-    private val currentMember = group.member<CurrentWeatherState, CurrentWeatherAction, LoadCurrentWeather, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-current"))
-    private val hourlyMember = group.member<HourlyForecastState, HourlyForecastAction, LoadHourlyForecast, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-hourly"))
-    private val adviceMember = group.member<WeatherAdviceState, WeatherAdviceAction, LoadWeatherAdvice, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-advice"))
+    private val screenMember = group.member<WeatherScreenState, WeatherScreenAction, Unit, WeatherScreenEvent>(id = StoreInstanceId(value = "weather-screen"))
+    private val currentMember = group.member<CurrentWeatherState, CurrentWeatherAction, Unit, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-current"))
+    private val hourlyMember = group.member<HourlyForecastState, HourlyForecastAction, Unit, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-hourly"))
+    private val adviceMember = group.member<WeatherAdviceState, WeatherAdviceAction, Unit, actron.example.weather.core.mvi.NoEvent>(id = StoreInstanceId(value = "weather-advice"))
     private val city = initial.screen.snapshot.context.city
 
-    val current = createStore(machine = CurrentWeatherMachine.create(), checkpoint = initial.current, handler = currentWeatherHandler(repository = currentRepository), member = currentMember, recording = recordings.current, update = { session.updateWeather(checkpoint = session.weatherCheckpoint(city = city).copy(current = it)) })
-    val hourly = createStore(machine = HourlyForecastMachine.create(), checkpoint = initial.hourly, handler = hourlyForecastHandler(repository = hourlyRepository), member = hourlyMember, recording = recordings.hourly, update = { session.updateWeather(checkpoint = session.weatherCheckpoint(city = city).copy(hourly = it)) })
-    val advice = createStore(machine = WeatherAdviceMachine.create(), checkpoint = initial.advice, handler = weatherAdviceHandler(repository = currentRepository), member = adviceMember, recording = recordings.advice, update = { session.updateWeather(checkpoint = session.weatherCheckpoint(city = city).copy(advice = it)) })
+    val current = createStore(machine = CurrentWeatherMachine.create(currentRepository), checkpoint = initial.current, member = currentMember, recording = recordings.current, update = { session.updateWeather(checkpoint = session.weatherCheckpoint(city = city).copy(current = it)) })
+    val hourly = createStore(machine = HourlyForecastMachine.create(hourlyRepository), checkpoint = initial.hourly, member = hourlyMember, recording = recordings.hourly, update = { session.updateWeather(checkpoint = session.weatherCheckpoint(city = city).copy(hourly = it)) })
+    val advice = createStore(machine = WeatherAdviceMachine.create(currentRepository), checkpoint = initial.advice, member = adviceMember, recording = recordings.advice, update = { session.updateWeather(checkpoint = session.weatherCheckpoint(city = city).copy(advice = it)) })
     val screen =
-        createStore(machine = CityWeatherMachine.create(), checkpoint = initial.screen, handler = CommandHandler { _, _ -> }, member = screenMember, recording = recordings.screen, update = { session.updateWeather(checkpoint = session.weatherCheckpoint(city = city).copy(screen = it)) }, pending = { step ->
+        createStore(machine = CityWeatherMachine.create(), checkpoint = initial.screen, member = screenMember, recording = recordings.screen, update = { session.updateWeather(checkpoint = session.weatherCheckpoint(city = city).copy(screen = it)) }, pending = { step ->
             if (step is RecordedStep.Committed) {
                 // Observers run before group delivery. This immutable cut includes committed routing
                 // intents; child observers then project the group's actual in-flight messages.
@@ -122,17 +116,16 @@ class WeatherMachines(
         scope.cancel()
     }
 
-    private fun <C : Any, A : Action, CMD : Any, E : Event> createStore(
-        machine: Machine<C, A, CMD, E>,
-        checkpoint: ExecutorCheckpoint<C, CMD>,
-        handler: CommandHandler<CMD, A>,
-        member: MachineGroup.Member<C, A, CMD, E>,
-        recording: MachineRecording<C, A, CMD, E>,
-        update: (ExecutorCheckpoint<C, CMD>) -> Unit,
-        pending: (RecordedStep<C, A, CMD, E>) -> List<BridgeMessage> = { group.inFlight },
-    ): MachineStore<C, A, CMD, E> =
+    private fun <C : Any, A : Action, E : Event> createStore(
+        machine: ScreenMachine<C, A, E>,
+        checkpoint: ExecutorCheckpoint<C, Unit>,
+        member: MachineGroup.Member<C, A, Unit, E>,
+        recording: MachineRecording<C, A, Unit, E>,
+        update: (ExecutorCheckpoint<C, Unit>) -> Unit,
+        pending: (RecordedStep<C, A, Unit, E>) -> List<BridgeMessage> = { group.inFlight },
+    ): MachineStore<C, A, Unit, E> =
         runCatching {
-            val setup = recording.prepare(machine = machine, checkpoint = checkpoint, handler = handler)
+            val setup = recording.prepare(machine = machine, checkpoint = checkpoint, handler = noCommandHandler())
             val observers = listOf(member, session.observe(checkpoint = checkpoint, update = update, followsWeatherVisit = true, afterUpdate = { step -> session.updateWeatherPending(messages = pending(step)) })) + setup.observers
             val store =
                 if (checkpoint.snapshot.isStarted) {

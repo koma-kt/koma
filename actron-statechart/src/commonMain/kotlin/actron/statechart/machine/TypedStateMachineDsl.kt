@@ -205,13 +205,20 @@ open class TypedStateMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E :
             initial: S,
         ): Machine<C, A, CMD, E> = Machine(id, version, definition(initial), implementation)
 
-        internal fun definition(initial: S): StateChartDefinition = StateChartDefinition(finish(initial), nodes.toList(), transitions.toList())
+        internal fun definition(initial: S): StateChartDefinition = definition(initial::class)
+
+        internal fun definition(initialType: KClass<out S>): StateChartDefinition = StateChartDefinition(finishType(initialType, true), nodes.toList(), transitions.toList())
 
         internal fun finish(
             initial: S,
             validateBeforeStart: Boolean = true,
+        ): StateId = finishType(initial::class, validateBeforeStart)
+
+        private fun finishType(
+            initialType: KClass<out S>,
+            validateBeforeStart: Boolean,
         ): StateId {
-            val initialId = reference(initial::class)
+            val initialId = reference(initialType)
             require(references.all { (id, type) -> states[id] == type }) { "Every referenced state type must be declared" }
             require(registry.historyTargets.all { it in registry.histories }) { "Every history target needs history() in its compound" }
             require(registry.implicitTargets.all { it in registry.factories || it in registry.compounds }) { "Implicit targets require a state entry factory" }
@@ -225,7 +232,7 @@ open class TypedStateMachineBuilder<C : Any, S : Any, A : Action, CMD : Any, E :
             implementation.invariant("${prefix}typed-state-matches-graph") { snapshot ->
                 when {
                     !snapshot.isStarted -> {
-                        !validateBeforeStart || readState(snapshot.context)::class == initial::class
+                        !validateBeforeStart || readState(snapshot.context)::class == initialType
                     }
 
                     parent is StateId && !snapshot.isActive(parent) -> {

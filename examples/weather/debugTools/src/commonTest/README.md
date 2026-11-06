@@ -3,16 +3,16 @@
 [Example README](../../../README.md) · [Architecture](../../../docs/architecture.md) ·
 [Actron test API](../../../../../actron-statechart-test/README.md)
 
-Search uses declared transitions and chart timers in `typedStateMachine`; the weather features
-use `behaviorStateMachine` with suspend entry work. Tests run the real queued executor with scripted requests and virtual time. HTTP decoding
+All five machines use `screenMachine` with declared transitions and activation-owned entry work.
+Tests run the queued Store with injected repositories and virtual time. HTTP decoding
 tests use Ktor MockEngine, never the public weather server.
 
 | File | Contract checked |
 | --- | --- |
-| AdvancedWeatherTestingTest | Finite executor schedules, timeout boundary, cancellation, restart, city guard |
+| AdvancedWeatherTestingTest | Finite executor schedules, pending requests, cancellation, restart, city guard |
 | CitySearchGraphTest | Exact declared edges, response guard outcomes and remaining deadlines on resume |
-| CitySearchScenarioTest | Debounce, success, failure, timeout and clearing |
-| WeatherScenarioTest | Standalone forecast and advice lifecycles, retry, dismissal and timeout |
+| CitySearchScenarioTest | Debounce, success, failure and clearing |
+| WeatherScenarioTest | Standalone forecast and advice lifecycles, retry and dismissal |
 | GeneratedWeatherScenarios | Recorded executor scenarios with late entry result and late action |
 | GeneratedWeatherScenariosTest | Replay without I/O and importable display recordings |
 | CitySearchTest | Store/entry/repository integration and cancellation of HTTP |
@@ -32,7 +32,7 @@ CitySearchMachine.create { emptyList() }.test(scope = this, initial = CitySearch
 ```
 
 `dispatch` settles immediate queued work. `advanceTimeBy` advances coroutine virtual time.
-`completeCommand` supplies the actual request's result; it does not invoke HTTP. The driver
+Inject a repository to control the result or await cancellation. The driver
 asserts no unexpected failures or pending work and closes its executor. `allowPendingWork` is
 only for scenarios intentionally ending during execution.
 
@@ -43,12 +43,7 @@ choices such as answering the current request, editing the query, advancing time
 Assertions check the state after each step, and failures retain the actual operation sequence.
 This covers entry coroutines and cancellation; a pure static graph explorer cannot execute them.
 
-Search declarations support graph and guard-outcome coverage. Arbitrary Kotlin conditions in
-the other weather machines do not declare a complete reachable graph. The machine chart's
-source/target envelope is conservative; do not assert every envelope edge is reachable or mutate
-a chart guard to pretend that an ordinary Kotlin `if` was removed. Weather asserts observed
-state-pair coverage, positive/negative outcomes, and every relevant business phase. Full static
-coverage and guard mutations remain supported for the explicit graph DSL elsewhere in Actron.
+Weather tests exercise declared edges, accepted and rejected guards, and cancellation on exit.
 
 ## Cancellation and late outcomes
 

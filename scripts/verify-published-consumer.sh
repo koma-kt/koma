@@ -39,6 +39,12 @@ if [[ "$TARGET" == jvm ]]; then
   fi
 fi
 mkdir -p "$WORK/positive" "$WORK/negative"
+# Compile the exact screen declaration and Store construction shown to new users.
+awk '/^<!-- compiled-quick-start -->$/ { marker=1; next }
+     marker && /^```kotlin$/ { code=1; next }
+     code && /^```$/ { done=1; exit }
+     code { print }
+     END { if (!done || !code) exit 1 }' "$ROOT/README.md" > "$WORK/positive/ReadmeCounter.kt"
 cp "$ROOT/verification/published-consumer/contracts/PositiveContracts.kt" "$WORK/positive/"
 cp "$ROOT/verification/published-consumer/contracts/"*.kt "$WORK/negative/"
 "$ROOT/gradlew" -p "$ROOT/verification/published-consumer" "${PROPERTIES[@]}" -Pconsumer.contractSources="$WORK/positive" "${TASKS[@]}" verifyPublishedGraphs --no-configuration-cache --max-workers=2 --no-daemon

@@ -32,7 +32,4 @@ sealed interface RequestFailure {
     data class Unavailable(
         val message: String,
     ) : RequestFailure
-
-    @Serializable
-    data object Timeout : RequestFailure
 }

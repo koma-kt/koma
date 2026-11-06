@@ -3,7 +3,6 @@ package actron.example.weather.feature.weather.presentation
 import actron.core.Action
 import actron.core.Event
 import actron.example.weather.core.domain.City
-import actron.example.weather.core.mvi.NoCommand
 import actron.statechart.machine.*
 import kotlinx.serialization.Serializable
 
@@ -24,16 +23,15 @@ sealed interface WeatherScreenEvent : Event {
 
 /** The screen owns its header and requests updates; it never reads a child's internal state. */
 object CityWeatherMachine {
-    fun create(): Machine<WeatherScreenState, WeatherScreenAction, NoCommand, WeatherScreenEvent> =
-        behaviorStateMachine(
+    fun create(): ScreenMachine<WeatherScreenState, WeatherScreenAction, WeatherScreenEvent> =
+        screenMachine(
             id = DefinitionId(value = "city-weather"),
-            version = DefinitionVersion(value = "11"),
+            version = DefinitionVersion(value = "12"),
             initialType = WeatherScreenState::class,
-            build = {
-                state<WeatherScreenState>(build = {
-                    onEnter(block = { event(event = WeatherScreenEvent.RefreshChildren) })
-                    on<WeatherScreenAction.Refresh> { target(state = state) }
-                })
-            },
-        )
+        ) {
+            state<WeatherScreenState> {
+                onEnter { event(WeatherScreenEvent.RefreshChildren) }
+                on<WeatherScreenAction.Refresh> { target { state } }
+            }
+        }
 }

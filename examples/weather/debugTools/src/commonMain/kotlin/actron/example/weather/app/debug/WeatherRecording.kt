@@ -5,6 +5,8 @@ import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
+import actron.example.weather.feature.weather.data.SampleHourlyRepository
+import actron.example.weather.feature.weather.data.SampleWeatherRepository
 import actron.example.weather.feature.weather.presentation.*
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceMachine
 import actron.statechart.StateId
@@ -35,8 +37,8 @@ data class WeatherRecordingFrame(
 object WeatherRecording {
     private val search = CitySearchMachine.create(LocalCitySearchRepository)
     private val weather = CityWeatherMachine.create()
-    private val charts = listOf(search.chart.historyDefinition(search.id.value, search.version.value), weather.chart.historyDefinition(weather.id.value, weather.version.value), CurrentWeatherMachine.create().let { it.chart.historyDefinition(it.id.value, it.version.value) }, HourlyForecastMachine.create().let { it.chart.historyDefinition(it.id.value, it.version.value) }, WeatherAdviceMachine.create().let { it.chart.historyDefinition(it.id.value, it.version.value) })
-    private val machineCharts = mapOf("city-search" to search.chart, "city-weather" to weather.chart, "current-weather" to CurrentWeatherMachine.create().chart, "hourly-forecast" to HourlyForecastMachine.create().chart, "weather-advice" to WeatherAdviceMachine.create().chart)
+    private val charts = listOf(search.chart.historyDefinition(search.id.value, search.version.value), weather.chart.historyDefinition(weather.id.value, weather.version.value), CurrentWeatherMachine.create(SampleWeatherRepository).let { it.chart.historyDefinition(it.id.value, it.version.value) }, HourlyForecastMachine.create(SampleHourlyRepository).let { it.chart.historyDefinition(it.id.value, it.version.value) }, WeatherAdviceMachine.create(SampleWeatherRepository).let { it.chart.historyDefinition(it.id.value, it.version.value) })
+    private val machineCharts = mapOf("city-search" to search.chart, "city-weather" to weather.chart, "current-weather" to CurrentWeatherMachine.create(SampleWeatherRepository).chart, "hourly-forecast" to HourlyForecastMachine.create(SampleHourlyRepository).chart, "weather-advice" to WeatherAdviceMachine.create(SampleWeatherRepository).chart)
     val definitions = charts
 
     // Display schema plus machine versions/graphs reject incompatible files before preview.

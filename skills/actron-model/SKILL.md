@@ -20,16 +20,14 @@ the signatures in `actron-statechart/src/commonMain/kotlin/actron/statechart/mac
   handwritten reducer interface, standalone Store DSL, or legacy coroutine chart adapter.
   `StoreBuilder` and `createRuntimeStore` are internal engine infrastructure.
 
-- For state-local Kotlin behavior, start with `behaviorStateMachine<State, Action, Command,
-  Event>`; use `Nothing` for absent commands/events. `on<Action>` reads immutable `state`
-  and proposes at most one complete replacement with `target(state = ...)`.
-  Root targets construct the entire next state. Use read/write bindings only for parallel regions.
-  Same-state transitions exit/re-enter and restart entry work. The captured `state` does not
-  change after `target`. Weather uses this API.
-- Suspend `onEnter` runs outside action processing and is cancelled on exit/close. Use ordinary
-  Kotlin conditions/delays there, and `command` for the existing command handler integration.
-  Late entry outcomes are activation-checked. Resume restarts unfinished entry work from its
-  beginning, including delay/timeout; it does not resume a coroutine continuation.
+- For MVI screens use `screenMachine<State, Action, Event>`. Each `on<Action>` declares a
+  `target { ... }` returning the complete next state, optionally guarded by `guard { ... }`.
+  Use `initialType` when initial data is supplied at runtime. Weather uses this DSL throughout.
+  Read/write bindings belong to parallel regions.
+- In a screen's suspend `onEnter`, call the injected repository and dispatch its result.
+  Cancellation propagates on exit or close. The Store validates results against the activation.
+  A restored Loading entry starts the read again. Declare deadlines with `after` so the
+  remaining duration survives restoration. Use `event` for one-time outputs.
 - Use `typedStateMachine` for explicit static graph declarations, hierarchy/history and chart
   timers. Its `internal<Action>` updates avoid exit/re-entry. Behavior graphs conservatively
   include possible targets; arbitrary Kotlin control flow is not exact static reachability.
@@ -40,7 +38,7 @@ the signatures in `actron-statechart/src/commonMain/kotlin/actron/statechart/mac
   demonstrates screen/current/hourly/advice composition, not a single parallel machine.
   Use hierarchical states for shared lifetime and typed invocation for parent-owned children
   requiring an atomic snapshot. Do not rebuild these contracts with flags or detached jobs.
-- Keep action rules and guards pure. Declare commands in entry work and execute use cases in
+- Keep action rules and guards pure. For machines that explicitly model commands, run work in
   command handlers. Results return as typed actions through the Store. Choose command scopes,
   lanes and cancellation policies to match the domain; do not bypass them with detached jobs.
   Prefer `commandHandler(onFailure = ...)` for one result or `commandHandlers { handle<T> ... }`

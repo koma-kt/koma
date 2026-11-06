@@ -5,7 +5,6 @@ import actron.core.Event
 import actron.core.InputAttribution
 import actron.example.weather.core.domain.City
 import actron.example.weather.core.mvi.NoEvent
-import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.cities.domain.CityOption
 import actron.example.weather.feature.cities.presentation.*
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherAction
@@ -78,12 +77,11 @@ object GeneratedWeatherScenarios {
 
     suspend fun weather(scope: TestScope) =
         recorded(
-            machine = CurrentWeatherMachine.create(),
+            machine = CurrentWeatherMachine.create { city -> WeatherReading(city, 12.0, 10.0, 3.0, 0, "12:00") },
             context = CurrentWeatherState.Ready(city = kazan),
             scope = scope,
         ) { _ ->
             send(action = CurrentWeatherAction.Refresh)
-            answer(command = runningCommands.single().id, result = CurrentWeatherAction.Loaded(reading = WeatherReading(city = kazan, temperature = 12.0, feelsLike = 10.0, wind = 3.0, code = 0, time = "12:00")))
             assertIs<CurrentWeatherState.Success>(value = snapshot.context)
         }
 }

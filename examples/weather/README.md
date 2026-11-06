@@ -76,10 +76,9 @@ Desktop. The old article, replay and CLI-check modes have been removed from this
 
 - **Decompose** owns the component tree, lifecycle and navigation stack. The root handles only
   `CitySelected(city)` and `BackClicked`. The weather configuration carries the selected city.
-- **Actron** owns each feature's `MachineStore`, state, transitions, timers, command execution
+- **Actron** owns each feature's `MachineStore`, state, transitions, timers, entry work
   and cancellation. Search and weather have independent stores; weather has a screen parent and three independent child stores.
-- **Command handlers** call feature repositories and return typed result actions. Network
-  access is outside the pure machine definitions.
+- **Loading entries** call feature repositories and dispatch result actions. The Store cancels an entry when its state exits.
 - **Compose** reads the machine snapshot and sends screen intents. UI models are pure formatting
   projections, never independent mutable stores.
 
@@ -97,14 +96,14 @@ core/mvi/RequestState.kt          Shared typed request lifecycle
 feature/cities/
   data/                          HTTP and offline search repositories
   domain/                        CitySearchRepository
-  presentation/                  Component, machine, command handler, screen and UI projection
+  presentation/                  Component, machine, screen and UI projection
 feature/weather/
   data/                          Current/hourly HTTP and offline repositories
   domain/                        Weather data and repository interfaces
   presentation/                  Parent machine, screen and derived UI projection
-currentweather/presentation/     Standalone current-weather context, actions, machine and handler
-hourlyforecast/presentation/     Standalone forecast context, actions, machine and handler
-weatheradvice/presentation/      Standalone advice context, actions, machine and handler
+currentweather/presentation/     Standalone current-weather state, actions and machine
+hourlyforecast/presentation/     Standalone forecast state, actions and machine
+weatheradvice/presentation/      Standalone advice state, actions and machine
 ```
 
 Application component factories retain each `MachineInstance` through Decompose's `InstanceKeeper`.
@@ -127,13 +126,14 @@ val store = componentContext.retainedMachine(
     key = "city-search",
     machine = CitySearchMachine.create(repository),
     initial = CitySearchState.Idle(),
+    coroutineContext = machineContext,
 )
 ```
 
 Add `restoration = session.searchRestoration()` to restore/track search checkpoints.
 Independently add `recording = history.recording()` to enable recording and profiling. The option binds once, before
 startup. Weather retains four stores with typed MachineGroup routes and starts the parent after the children enter Ready; the parent emits the first refresh event automatically.
-The adapter owns retention/start/close and the command scope; UI subscriptions still belong
+The adapter owns retention/start/close and the entry scope; UI subscriptions still belong
 to their component. See [the installation contract](docs/architecture.md#one-call-machine-installation).
 The helper is part of `actron-decompose`; these changes have not yet been released to Maven Central.
 
@@ -145,9 +145,9 @@ Every edit enters `QueryChanged` and updates the query and revision once. Its or
 transitions select `Idle` for blank input, falling back to `Debouncing` otherwise, within the same decision.
 350 ms of quiet starts the request, even for one letter.
 Clearing cancels pending work and restores `Idle`. An empty server response is `Success(emptyList())`.
-Responses for outdated revisions are ignored. Requests time out after eight seconds.
+Responses for outdated revisions are ignored. The shared HTTP client sets a seven-second request deadline.
 
-`CityWeatherMachine` owns the city header and accepts `WeatherScreenAction.Refresh`. Its Active
+`CityWeatherMachine` owns the city header and accepts `WeatherScreenAction.Refresh`. Its `WeatherScreenState`
 entry emits one `WeatherScreenEvent.RefreshChildren` on fresh startup and every Refresh self-loop.
 `WeatherMachines` attaches four stores to a MachineGroup and declares three typed routes:
 
@@ -155,7 +155,7 @@ entry emits one `WeatherScreenEvent.RefreshChildren` on fresh startup and every 
 - RefreshChildren → `HourlyForecastAction.Refresh` for HourlyForecastMachine.
 - RefreshChildren → `WeatherAdviceAction.Refresh` for WeatherAdviceMachine.
 
-The children have their own contexts, action types, commands, handlers and serialized queues.
+The children have their own state types, actions, cancellable entries and serialized queues.
 They know neither the parent nor one another. They start in Ready without requests or timers;
 then the parent's first event starts loading automatically. Current and Hourly use
 Ready / Loading / Success / Error. Advice uses Ready / Loading / Hidden / Visible / Error /
@@ -163,7 +163,7 @@ Dismissed and interprets its own reading as weather tips. A global update makes 
 current-weather calls and one hourly call. Local Hourly Retry and Advice Retry/Dismiss preserve siblings.
 
 Every child accepts its Refresh from every state, including Loading and Dismissed. Re-entering
-Loading cancels the old work and starts a new request and timeout. Group delivery is not an atomic
+Loading cancels the old work and starts a new request. Group delivery is not an atomic
 multi-store transaction; the immutable UI projection may briefly show mixed phases. Saved and
 continuable frames include all four checkpoints and require all routed messages to be settled.
 Restoration preserves completed and dismissed children, restarting only pending work.
@@ -189,7 +189,7 @@ city data: [GeoNames](https://www.geonames.org/).
 ./gradlew :weather:androidApp:assembleDebug :nullability-guard:checkPolicy
 ```
 
-Tests cover HTTP decoding, debounce and revisions, cancellation and timeouts, independent
+Tests cover HTTP decoding, debounce and revisions, cancellation and request failures, independent
 independent requests, typed routes, generic serialization, navigation, host recreation and request cleanup.
 The optional debugTools module integrates the library's recording/replay and inspector APIs; its host adapter
 owns only Weather display frames, screen restoration and platform file access.
@@ -216,9 +216,8 @@ use the device's local time zone and locale.
 
 Selecting an event immediately renders the saved application frame with inputs disabled, without calling any
 repositories. Live recording continues in the background. Switching to **Live** exits preview.
-**Continue here** replaces the Decompose stack and executors with the selected frame and exits preview. Search context and both independent weather machines are restored
-together. Completed requests stay completed; running read requests restart, queued commands
-keep their lanes. Restoring search v15 preserves the remaining debounce and timeout duration; the timer
+**Continue here** replaces the Decompose stack and executors with the selected frame and exits preview. Search context and all four weather machines are restored
+together. Completed requests stay completed; pending reads restart from their Loading entry. Restoring search v16 preserves the remaining debounce duration; the timer
 deadline is stored in the machine snapshot. Old executors are closed; callbacks
 from an earlier branch cannot modify the new frame. After successful restoration, entries after the selected event are removed. Earlier entries
 and the selected event stay available; new execution extends this linear history. The original
@@ -231,9 +230,9 @@ One `save(frame)` / `restore(text)` call handles all machines and compatibility 
 Its host adapter maps the application route and retains branch metadata.
 The root registers a versioned current checkpoint with Essenty `StateKeeper`, which the Android
 host connects to saved instance state. After system-initiated process death, a new
-`InstanceKeeper` restores search data, weather data and pending commands before creating children.
+`InstanceKeeper` restores search data, weather state and pending entries before creating children.
 Decompose independently restores the screen stack. Completed reads are retained; pending HTTP
-reads are issued again. Debounce and timeout clocks resume with the delay remaining at save time,
+reads are issued again. The debounce timer resumes with the delay remaining at save time,
 so time spent without a process is paused. Saving again after restoration is supported.
 
 Only the latest resumable application checkpoint is saved, not the timeline or preview selection.
@@ -300,10 +299,10 @@ Validation:
 [GeneratedWeatherScenarios.kt](debugTools/src/commonTest/kotlin/actron/example/weather/GeneratedWeatherScenarios.kt)
 records an old Moscow entry completing during a new Kazan search. The machine rejects its
 activation and independently rejects an outdated action by revision. A separate trace runs the
-current-weather command. Both traces can be replayed through the pure decision function.
+current-weather repository call. Both traces can be replayed through the pure decision function.
 
 `CitySearchTest` checks cancellation through the real Store, repository and Ktor mock engine.
-`CitySearchGraphTest` checks the eleven declared edges, guards and restored timer deadlines.
+`CitySearchGraphTest` checks the ten declared edges, guards and restored timer deadlines.
 
 Run the tests and produce ready-to-import recordings:
 

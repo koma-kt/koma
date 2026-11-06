@@ -6,14 +6,13 @@ import actron.example.weather.core.mvi.NoEvent
 import actron.example.weather.core.mvi.RequestFailure
 import actron.example.weather.core.mvi.RequestState
 import actron.example.weather.feature.weather.domain.WeatherReading
+import actron.example.weather.feature.weather.domain.WeatherRepository
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
-import actron.statechart.machine.Machine
-import actron.statechart.machine.behaviorStateMachine
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.withTimeoutOrNull
+import actron.statechart.machine.ScreenMachine
+import actron.statechart.machine.screenMachine
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
-import kotlin.time.Duration.Companion.seconds
 
 @Serializable
 sealed interface CurrentWeatherState {
@@ -63,40 +62,39 @@ sealed interface CurrentWeatherAction : Action {
     ) : CurrentWeatherAction
 }
 
-@Serializable
-data class LoadCurrentWeather(
-    val city: City,
-)
-
-/** Reusable feature machine: no screen or sibling action is part of its contract. */
 object CurrentWeatherMachine {
-    fun create(): Machine<CurrentWeatherState, CurrentWeatherAction, LoadCurrentWeather, NoEvent> =
-        behaviorStateMachine(
-            id = DefinitionId(value = "current-weather"),
-            version = DefinitionVersion(value = "4"),
+    fun create(repository: WeatherRepository): ScreenMachine<CurrentWeatherState, CurrentWeatherAction, NoEvent> =
+        screenMachine(
+            id = DefinitionId("current-weather"),
+            version = DefinitionVersion("5"),
             initialType = CurrentWeatherState.Ready::class,
-            build = {
-                on<CurrentWeatherAction.Refresh> { target(CurrentWeatherState.Loading(state.city)) }
-                state<CurrentWeatherState.Ready>()
-                state<CurrentWeatherState.Loading>(build = {
-                    onEnter {
-                        withTimeoutOrNull<Unit>(timeout = 8.seconds) {
-                            command(command = LoadCurrentWeather(city = state.city))
-                            awaitCancellation()
+        ) {
+            state<CurrentWeatherState.Ready> {
+                on<CurrentWeatherAction.Refresh> { target { CurrentWeatherState.Loading(state.city) } }
+            }
+            state<CurrentWeatherState.Loading> {
+                on<CurrentWeatherAction.Refresh> { target { CurrentWeatherState.Loading(state.city) } }
+                onEnter {
+                    val result =
+                        runCatching {
+                            CurrentWeatherAction.Loaded(reading = repository.load(state.city))
+                        }.getOrElse { error ->
+                            if (error is CancellationException || error !is Exception) throw error
+                            CurrentWeatherAction.Failed(error.message ?: "Weather request failed")
                         }
-                        target(CurrentWeatherState.Error(state.city, cause = RequestFailure.Timeout))
-                    }
-                    on<CurrentWeatherAction.Loaded> { action ->
-                        if (action.reading.city == state.city) {
-                            target(CurrentWeatherState.Success(state.city, action.reading))
-                        }
-                    }
-                    on<CurrentWeatherAction.Failed> { action ->
-                        target(CurrentWeatherState.Error(state.city, cause = RequestFailure.Unavailable(message = action.message)))
-                    }
-                })
-                state<CurrentWeatherState.Success>()
-                state<CurrentWeatherState.Error>()
-            },
-        )
+                    dispatch(result)
+                }
+                on<CurrentWeatherAction.Loaded> {
+                    guard { action -> action.reading.city == state.city }
+                    target { action -> CurrentWeatherState.Success(state.city, action.reading) }
+                }
+                on<CurrentWeatherAction.Failed> { target { action -> CurrentWeatherState.Error(state.city, RequestFailure.Unavailable(action.message)) } }
+            }
+            state<CurrentWeatherState.Success> {
+                on<CurrentWeatherAction.Refresh> { target { CurrentWeatherState.Loading(state.city) } }
+            }
+            state<CurrentWeatherState.Error> {
+                on<CurrentWeatherAction.Refresh> { target { CurrentWeatherState.Loading(state.city) } }
+            }
+        }
 }

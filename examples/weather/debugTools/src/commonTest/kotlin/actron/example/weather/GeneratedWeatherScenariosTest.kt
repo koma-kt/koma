@@ -5,11 +5,11 @@ import actron.example.weather.app.debug.WeatherRecording
 import actron.example.weather.app.debug.WeatherRecordingFrame
 import actron.example.weather.feature.cities.presentation.CitySearchAction
 import actron.example.weather.feature.cities.presentation.CitySearchState
+import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
 import actron.example.weather.feature.currentweather.presentation.toRequestState
 import actron.example.weather.feature.hourlyforecast.presentation.toRequestState
 import actron.example.weather.feature.weather.presentation.WeatherContext
-import actron.example.weather.feature.weather.presentation.toUiState
 import actron.statechart.machine.*
 import actron.statechart.test.*
 import actron.timetravel.HistoryExportSettings
@@ -57,6 +57,13 @@ class GeneratedWeatherScenariosTest {
         runTest {
             val trace = GeneratedWeatherScenarios.weather(scope = this)
             trace.assertSuccess()
+            val replay = CurrentWeatherMachine.create { error("Replay must not call the repository") }
+            var snapshot = trace.initial
+            for (step in trace.steps) {
+                snapshot = replay.decide(snapshot, step.input).snapshot
+                assertEquals(step.after, snapshot)
+            }
+            assertIs<CurrentWeatherState.Success>(snapshot.context)
             val imported = WeatherRecording.import(bytes = WeatherRecording.codec.encode(recording = weatherRecording(trace = trace)))
             assertTrue(actual = imported.entries.isNotEmpty())
         }

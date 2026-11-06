@@ -10,6 +10,8 @@ import actron.example.weather.feature.cities.data.LocalCitySearchRepository
 import actron.example.weather.feature.cities.presentation.CitySearchMachine
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.hourlyforecast.presentation.HourlyForecastMachine
+import actron.example.weather.feature.weather.data.SampleHourlyRepository
+import actron.example.weather.feature.weather.data.SampleWeatherRepository
 import actron.example.weather.feature.weather.presentation.CityWeatherMachine
 import actron.example.weather.feature.weatheradvice.presentation.WeatherAdviceMachine
 import actron.statechart.machine.*
@@ -53,9 +55,9 @@ class WeatherHistory(
     private val weatherCharts =
         mapOf(
             "city-weather" to CityWeatherMachine.create().chart,
-            "current-weather" to CurrentWeatherMachine.create().chart,
-            "hourly-forecast" to HourlyForecastMachine.create().chart,
-            "weather-advice" to WeatherAdviceMachine.create().chart,
+            "current-weather" to CurrentWeatherMachine.create(SampleWeatherRepository).chart,
+            "hourly-forecast" to HourlyForecastMachine.create(SampleHourlyRepository).chart,
+            "weather-advice" to WeatherAdviceMachine.create(SampleWeatherRepository).chart,
         )
 
     fun graph(entry: HistoryEntry<WeatherHistoryFrame>): HistoryGraph =

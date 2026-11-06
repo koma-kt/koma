@@ -540,3 +540,9 @@ target preserves its activation. This supersedes the earlier root phase and upda
 City search uses `ScreenMachine<State, Action, Event>` and dispatches repository outcomes
 from its activation-owned entry. Search definition v15 restores pending entry work and
 its deadline. Command-based definitions continue using the four-parameter machine.
+
+
+Weather uses the screen DSL for search, current weather, hourly forecast, advice and their
+parent screen. Search v16 checkpoints only the debounce timer; Loading restarts the
+repository call. The shared HTTP client owns request deadlines. The screen DSL accepts an
+initial state type when the initial value comes from the caller.

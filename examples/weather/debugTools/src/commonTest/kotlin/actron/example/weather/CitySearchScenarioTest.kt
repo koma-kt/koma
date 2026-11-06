@@ -9,7 +9,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 class CitySearchScenarioTest {
     @Test
@@ -35,7 +34,7 @@ class CitySearchScenarioTest {
         }
 
     @Test
-    fun errorTimeoutAndClearCancelPendingWork() =
+    fun editingAfterFailureAndClearingCancelPendingWork() =
         runTest {
             val report =
                 CitySearchMachine.create { awaitCancellation() }.test(this, CitySearchState.Idle()) {
@@ -45,8 +44,7 @@ class CitySearchScenarioTest {
                     assertEquals(RequestFailure.Unavailable(message = "offline"), expectState<CitySearchState.Error>().cause)
                     dispatch(CitySearchAction.ChangeQuery("Lo"))
                     advanceTimeBy(350.milliseconds)
-                    advanceTimeBy(8.seconds)
-                    assertEquals(RequestFailure.Timeout, expectState<CitySearchState.Error>().cause)
+                    expectState<CitySearchState.Loading>()
                     dispatch(CitySearchAction.ChangeQuery("Lon"))
                     advanceTimeBy(350.milliseconds)
                     dispatch(CitySearchAction.ChangeQuery(""))

@@ -117,7 +117,6 @@ class CitySearchTest {
                 CitySearchState.Success("P", 1, listOf(CityOption(demoCities.first()))),
                 CitySearchState.Success("P", 1, emptyList<CityOption>()),
                 CitySearchState.Error("P", 1, cause = RequestFailure.Unavailable(message = "offline")),
-                CitySearchState.Error("P", 1, cause = RequestFailure.Timeout),
             )
         for (state in states) {
             val encoded =
@@ -234,34 +233,6 @@ class CitySearchTest {
                 store.state.first { it.context is CitySearchState.Success }
                 assertEquals(2, calls)
                 assertEquals(CitySearchState.Success("P", 2, emptyList<CityOption>()), store.state.value.context)
-            } finally {
-                store.close()
-            }
-        }
-
-    @Test
-    fun timeoutCancelsRequestAndRejectsLateAnswer() =
-        runTest {
-            var cancelled = false
-            val store =
-                searchStore(
-                    CitySearchRepository {
-                        try {
-                            awaitCancellation()
-                        } finally {
-                            cancelled = true
-                        }
-                    },
-                )
-            try {
-                store.start()
-                store.dispatch(CitySearchAction.ChangeQuery("P"))
-                store.state.first { it.context == CitySearchState.Error("P", 1, cause = RequestFailure.Timeout) }
-                testScheduler.runCurrent()
-                assertTrue(cancelled)
-                store.dispatch(CitySearchAction.Found(1, listOf(CityOption(demoCities.first()))))
-                testScheduler.runCurrent()
-                assertEquals(CitySearchState.Error("P", 1, cause = RequestFailure.Timeout), store.state.value.context)
             } finally {
                 store.close()
             }

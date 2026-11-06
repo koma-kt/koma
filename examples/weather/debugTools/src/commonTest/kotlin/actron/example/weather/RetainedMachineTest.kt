@@ -11,7 +11,6 @@ import actron.example.weather.feature.cities.presentation.CitySearchState
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherAction
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherMachine
 import actron.example.weather.feature.currentweather.presentation.CurrentWeatherState
-import actron.example.weather.feature.currentweather.presentation.currentWeatherHandler
 import actron.example.weather.feature.weather.domain.WeatherRepository
 import com.arkivanov.decompose.DefaultComponentContext
 import com.arkivanov.essenty.instancekeeper.InstanceKeeperDispatcher
@@ -40,14 +39,13 @@ class RetainedMachineTest {
                     cancelled++
                 }
             }
-            val handler = currentWeatherHandler(repository = WeatherRepository { request() })
+            val machine = CurrentWeatherMachine.create(WeatherRepository { request() })
 
             fun create() =
                 DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper).retainedMachine(
                     key = "weather",
-                    machine = CurrentWeatherMachine.create(),
+                    machine = machine,
                     initial = CurrentWeatherState.Ready(demoCities.first()),
-                    handler = handler,
                     coroutineContext = coroutineContext,
                     initialActions = listOf(CurrentWeatherAction.Refresh),
                 )
@@ -69,9 +67,9 @@ class RetainedMachineTest {
         runTest {
             val keeper = InstanceKeeperDispatcher()
             val context = DefaultComponentContext(LifecycleRegistry(), instanceKeeper = keeper)
-            val handler = currentWeatherHandler(repository = WeatherRepository { awaitCancellation() })
-            val first = context.retainedMachine("first", CurrentWeatherMachine.create(), CurrentWeatherState.Ready(demoCities[0]), handler, coroutineContext = coroutineContext)
-            val second = context.retainedMachine("second", CurrentWeatherMachine.create(), CurrentWeatherState.Ready(demoCities[1]), handler, coroutineContext = coroutineContext)
+            val machine = CurrentWeatherMachine.create(WeatherRepository { awaitCancellation() })
+            val first = context.retainedMachine("first", machine, CurrentWeatherState.Ready(demoCities[0]), coroutineContext = coroutineContext)
+            val second = context.retainedMachine("second", machine, CurrentWeatherState.Ready(demoCities[1]), coroutineContext = coroutineContext)
             testScheduler.runCurrent()
             assertNotSame(first, second)
             assertEquals(demoCities[0], first.state.value.context.city)

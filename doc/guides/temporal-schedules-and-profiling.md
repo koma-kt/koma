@@ -23,13 +23,13 @@ val rules = TemporalRules<
     CitySearchState, CitySearchAction, Unit, NoEvent
 >().apply {
     respondsWithin(
-        name = "each-search-finishes-or-is-cancelled",
-        within = 8.seconds,
+        name = "each-debounce-finishes-or-is-replaced",
+        within = 350.milliseconds,
         maxSteps = 20,
-        triggered = { it.before.context !is CitySearchState.Loading && it.after.context is CitySearchState.Loading },
+        triggered = { it.before.context.revision != it.after.context.revision && it.after.context is CitySearchState.Debouncing },
         satisfied = { started, later ->
             later.after.context.revision != started.after.context.revision ||
-                later.after.context !is CitySearchState.Loading
+                later.after.context !is CitySearchState.Debouncing
         },
     )
 }
@@ -38,8 +38,7 @@ rules.check(trace).assertSatisfied()
 ```
 
 Here changing the query cancels the old generation and satisfies its obligation.
-A new request creates a separate obligation. Without generation correlation, an
-unrelated request's answer could accidentally satisfy the rule.
+Each nonblank edit starts a new obligation for its revision, even if the previous query was still debouncing.
 
 `always(name) { prefix -> ... }` checks each prefix for a safety property. Add
 `temporal(rules)` to a `scenarios` builder to reject violations during generation
@@ -65,34 +64,28 @@ it does not claim infinite-future liveness or automatically finish every prefix.
 ## 2. Explore delivery order on the real executor
 
 The pure graph generator tests decisions. `exploreSchedules` additionally exercises
-the real queued `MachineStore`, command handler cancellation and virtual timers:
+the real queued `MachineStore`, entry cancellation and virtual timers:
 
 ```kotlin
-val report = CityWeatherMachine.create().exploreSchedules(
-    initial = WeatherContext(kazan),
-    scope = this, // inside runTest
-    maxDepth = 2,
-    maxRuns = 30,
-    setup = { send(WeatherAction.Refresh) },
+val report = CurrentWeatherMachine.create { awaitCancellation() }.exploreSchedules(
+    initial = CurrentWeatherState.Ready(kazan),
+    scope = this,
+    maxDepth = 1,
+    maxRuns = 20,
+    setup = { send(CurrentWeatherAction.Refresh) },
     choices = {
-        if (runningCommands.isEmpty()) {
-            emptyList()
+        if (snapshot.context is CurrentWeatherState.Loading) {
+            listOf(
+                ScheduleOperation.Send(CurrentWeatherAction.Loaded(reading(kazan))),
+                ScheduleOperation.Send(CurrentWeatherAction.Failed("offline")),
+            )
         } else {
-            runningCommands.map { command ->
-                val reply = when (command.command) {
-                    is WeatherCommand.Current -> WeatherAction.Loaded(reading(kazan))
-                    is WeatherCommand.Hourly ->
-                        WeatherAction.ForecastLoaded(forecast(kazan))
-                }
-                ScheduleOperation.Answer(command.id, reply)
-            } + ScheduleOperation.Advance(8.seconds)
+            emptyList()
         }
     },
     check = {
-        val current = snapshot.context.current
-        if (current is RequestState.Success) {
-            assertEquals(kazan, current.value.city)
-        }
+        val current = snapshot.context
+        if (current is CurrentWeatherState.Success) assertEquals(kazan, current.reading.city)
     },
 )
 report.assertSuccess()
@@ -118,7 +111,7 @@ Use the path passed to `choices` to limit restarts:
 choices = { path ->
     buildList {
         // Add finite answers / advances appropriate to this snapshot.
-        if (ScheduleOperation.Restart !in path && runningCommands.isNotEmpty()) {
+        if (ScheduleOperation.Restart !in path && snapshot.pendingEntries.isNotEmpty()) {
             add(ScheduleOperation.Restart)
         }
     }
@@ -137,12 +130,12 @@ val report = machine.testMutations(
     listOf(TransitionMutation(loadedTransition, MutationKind.RemoveGuard)),
 ) { variant ->
     // Run the same test against the supplied variant, not the captured original.
-    val driver = MachineTestDriver(variant, WeatherContext(kazan), this)
+    val driver = MachineTestDriver(variant, CurrentWeatherState.Ready(kazan), this)
     try {
         driver.start()
-        driver.send(WeatherAction.Refresh)
-        driver.send(WeatherAction.Loaded(reading(moscow)))
-        assertIs<RequestState.Loading>(driver.snapshot.context.current)
+        driver.send(CurrentWeatherAction.Refresh)
+        driver.send(CurrentWeatherAction.Loaded(reading(moscow)))
+        assertIs<CurrentWeatherState.Loading>(driver.snapshot.context)
     } finally {
         driver.close()
     }
@@ -213,7 +206,6 @@ The library profiling APIs described above are independent of the Weather applic
 
 See the executable examples in
 [`AdvancedWeatherTestingTest.kt`](../../examples/weather/debugTools/src/commonTest/kotlin/actron/example/weather/AdvancedWeatherTestingTest.kt).
-They cover temporal cancellation, both forecast/current answer orders, errors and
-timeout, changing Moscow to Kazan, restart during debounce and HTTP, and a removed
-city guard. Test handlers return fixtures; these exploration tests make no real HTTP
+They cover entry cancellation, success and failure, replacing Moscow with Kazan,
+restart during debounce and HTTP, and rejecting a result for the wrong city. Repositories are injected; these exploration tests make no real HTTP
 requests.
