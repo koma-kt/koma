@@ -4,7 +4,7 @@ Optional bridge from generated machine-test traces to view-only Time Travel reco
 Keep this dependency in a test source set:
 
 ```kotlin
-implementation("io.github.roman-n1:actron-timetravel-test:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-timetravel-test:1.0.0-beta.1")
 ```
 
 This module depends on `actron-statechart-test` and `actron-timetravel`. The generator itself

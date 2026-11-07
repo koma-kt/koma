@@ -15,9 +15,9 @@ relocations are provided. The upstream Koma project retains its name and coordin
 | `.koma/`, `*.koma.json` model artifacts | `.actron/`, `*.actron.json` |
 | Koma Behavioural Model IDE plugin | Actron Behavioural Model (`io.github.roman-n1.actron`) |
 
-The configured version remains `5.0.0-alpha.1`; the renamed artifacts have not been
+The configured version is `1.0.0-beta.1`; the renamed artifacts have not been
 published by this change. For a local composite build, point `includeBuild` at the Actron
-checkout and request `io.github.roman-n1:actron-core:5.0.0-alpha.1` (plus optional modules).
+checkout and request `io.github.roman-n1:actron-core:1.0.0-beta.1` (plus optional modules).
 
 Update dependencies, imports, opt-ins, Gradle commands, scripts and model artifact paths
 together. Reinstall the IDE plugin under its new ID. The core Kotlin/Native, JS and Wasm

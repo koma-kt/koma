@@ -57,8 +57,8 @@ the segment layout `JOURNAL_FILE_FORMAT_VERSION` 1; every recording is `Capabili
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.roman-n1:actron-observability:5.0.0-alpha.1")
-            implementation("io.github.roman-n1:actron-logging:5.0.0-alpha.1") // LoggerJournalSink
+            implementation("io.github.roman-n1:actron-observability:1.0.0-beta.1")
+            implementation("io.github.roman-n1:actron-logging:1.0.0-beta.1") // LoggerJournalSink
         }
     }
     compilerOptions {

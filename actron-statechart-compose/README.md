@@ -31,7 +31,7 @@ Status: **supported API**, in the fork [roman-n1/actron](https://github.com/roma
 ## Dependency
 
 ```kotlin
-implementation("io.github.roman-n1:actron-statechart-compose:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-statechart-compose:1.0.0-beta.1")
 ```
 
 The module brings `actron-compose` and `actron-statechart` with it (`api` dependencies). Targets:

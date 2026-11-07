@@ -110,7 +110,7 @@ causality mismatches. Seeking restores recorded checkpoints; verification remain
 ## Dependency
 
 ```kotlin
-implementation("io.github.roman-n1:actron-timetravel:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-timetravel:1.0.0-beta.1")
 ```
 
 The module brings `actron-statechart` and `actron-observability` with it; see the

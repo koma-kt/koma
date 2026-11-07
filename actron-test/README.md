@@ -13,7 +13,7 @@ Follow [installation](../README.md#installation). Add this to the test source se
 
 ```kotlin
 commonTest.dependencies {
-    implementation("io.github.roman-n1:actron-test:5.0.0-alpha.1")
+    implementation("io.github.roman-n1:actron-test:1.0.0-beta.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 }
 ```
