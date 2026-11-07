@@ -4,6 +4,9 @@
 
 **Kotlin Multiplatform MVI with typed state machines.**
 
+The first Actron release, `1.0.0-beta.1`, is available on
+[Maven Central](https://central.sonatype.com/artifact/io.github.roman-n1/actron-statechart/1.0.0-beta.1).
+
 Describe states, actions and transitions in Kotlin. Actron processes actions in order,
 publishes state, and runs suspending entry work such as network requests. The same machine definition
 supports diagrams, tests, recordings and replay.
@@ -277,14 +280,9 @@ verify the resolved Actron version and use its matching signatures and examples.
 
 ## Installation
 
-Actron's configured coordinates are **`io.github.roman-n1:<module>:1.0.0-beta.1`**.
-GitHub releases provide source archives and may include an IDE plugin ZIP. Maven Central
-publication is separate; for development, use a local checkout/composite build:
-
-```kotlin
-// settings.gradle.kts in your application
-includeBuild("../actron") // path to this repository; its root name is Actron
-```
+Add `mavenCentral()` to your Gradle dependency repositories and use
+**`io.github.roman-n1:<module>:1.0.0-beta.1`**. For Kotlin Multiplatform, add the
+modules you need to `commonMain`:
 
 ```kotlin
 // Kotlin Multiplatform build.gradle.kts in your application
@@ -298,11 +296,12 @@ kotlin {
 }
 ```
 
-The publishing convention sets the included projects' group/version, so Gradle substitutes
-the matching coordinates. Add only the modules you need; no Actron opt-in is required.
-Keep all Actron modules on the same version. Actron uses `actron.*` packages and requires
-recompiling consumers that previously imported `koma.*`; it is not a binary replacement.
 For an Android-only build, the same dependency line belongs in `dependencies { … }`.
+Keep all Actron modules on the same version.
+
+To develop against a local Actron checkout, add `includeBuild("../actron")` to your
+application's `settings.gradle.kts`. Gradle substitutes the local projects for the
+matching Maven coordinates.
 
 ## Modules
 
