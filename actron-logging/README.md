@@ -9,7 +9,7 @@ or create a replay recording.
 See [installation](../README.md#installation), then add:
 
 ```kotlin
-implementation("io.github.roman-n1:actron-logging:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-logging:1.0.0-beta.1")
 ```
 
 ## Simple Store logs

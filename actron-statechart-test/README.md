@@ -34,7 +34,7 @@ Status: **supported API**, in the fork [roman-n1/actron](https://github.com/roma
 
 ```kotlin
 // test source set only
-implementation("io.github.roman-n1:actron-statechart-test:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-statechart-test:1.0.0-beta.1")
 ```
 
 ## Quick start

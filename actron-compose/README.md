@@ -9,7 +9,7 @@ This module depends on core, not on the statechart or debug inspector.
 See [installation](../README.md#installation) for the fork's composite-build setup.
 
 ```kotlin
-implementation("io.github.roman-n1:actron-compose:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-compose:1.0.0-beta.1")
 ```
 
 ## Render the counter

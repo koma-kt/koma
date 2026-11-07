@@ -277,7 +277,7 @@ verify the resolved Actron version and use its matching signatures and examples.
 
 ## Installation
 
-Actron's configured coordinates are **`io.github.roman-n1:<module>:5.0.0-alpha.1`**.
+Actron's configured coordinates are **`io.github.roman-n1:<module>:1.0.0-beta.1`**.
 GitHub releases provide source archives and may include an IDE plugin ZIP. Maven Central
 publication is separate; for development, use a local checkout/composite build:
 
@@ -291,8 +291,8 @@ includeBuild("../actron") // path to this repository; its root name is Actron
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.roman-n1:actron-statechart:5.0.0-alpha.1")
-            // For Decompose: implementation("io.github.roman-n1:actron-decompose:5.0.0-alpha.1")
+            implementation("io.github.roman-n1:actron-statechart:1.0.0-beta.1")
+            // For Decompose: implementation("io.github.roman-n1:actron-decompose:1.0.0-beta.1")
         }
     }
 }

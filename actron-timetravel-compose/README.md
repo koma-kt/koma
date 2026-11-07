@@ -225,7 +225,7 @@ Status: **supported API**, in the fork [roman-n1/actron](https://github.com/roma
 
 ```kotlin
 // debug source set only: this module must not be in a release dependency graph
-implementation("io.github.roman-n1:actron-timetravel-compose:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-timetravel-compose:1.0.0-beta.1")
 ```
 
 The library's CI runs `checkDebugGraph`: no production module of actron depends on

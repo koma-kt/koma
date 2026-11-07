@@ -2,7 +2,7 @@
 decompose = "3.5.0"
 ktlint = "1.8.0"
 detekt = "2.0.0-alpha.6"
-actron = "5.0.0-alpha.1"
+actron = "1.0.0-beta.1"
 agp = "9.4.1"
 kotlin = "2.4.21"
 coroutines = "1.11.0"

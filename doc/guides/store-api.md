@@ -176,7 +176,7 @@ It keeps surrounding helper layers intentionally small, so dependencies and feat
 ## Installation
 
 ```kt
-implementation("io.github.roman-n1:actron-core:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-core:1.0.0-beta.1")
 ```
 
 ## Usage
@@ -754,7 +754,7 @@ If you want state collection not to start the Store automatically, set `autoStar
 You can use Store's `.state` (StateFlow), `.event` (Flow), and `.dispatch()` directly, but we provide a mechanism for Compose.
 
 ```kt
-implementation("io.github.roman-n1:actron-compose:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-compose:1.0.0-beta.1")
 ```
 
 Create an instance of the `ViewStore` from a *Store* using the `rememberViewStore()` function.
@@ -1057,7 +1057,7 @@ The source code is the `:actron-logging` and `:actron-message` modules in this r
 Plugin for logging Store operations.
 
 ```kt
-implementation("io.github.roman-n1:actron-logging:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-logging:1.0.0-beta.1")
 ```
 
 Apply the `simpleLogging()` plugin factory function to your *Store* to log actions, events, and state changes.
@@ -1087,7 +1087,7 @@ If you want a different logging plugin shape entirely, implement your own Actron
 Plugin for sending messages between *Stores*.
 
 ```kt
-implementation("io.github.roman-n1:actron-message:5.0.0-alpha.1")
+implementation("io.github.roman-n1:actron-message:1.0.0-beta.1")
 ```
 
 First, prepare classes for messages.
@@ -1170,7 +1170,7 @@ fun CounterStore(
 Add `:actron-test` to your test source set to use Actron's test helpers.
 
 ```kt
-commonTestImplementation("io.github.roman-n1:actron-test:5.0.0-alpha.1")
+commonTestImplementation("io.github.roman-n1:actron-test:1.0.0-beta.1")
 ```
 
 Use `dispatchAndAwait(action)` to dispatch an *Action* and suspend until the *Store* finishes processing it. It waits for startup (when needed), the matching `action {}` handler, and the resulting synchronous state transition work, but not for additional work launched with `launch {}`.

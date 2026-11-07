@@ -101,7 +101,7 @@ See [derived behavioural feature contracts](../doc/internal/design/2026-10-06-de
 
 ## Dependency
 
-The fork publishes every module as `io.github.roman-n1:<module>:5.0.0-alpha.1` to Maven Central from
+The fork publishes every module as `io.github.roman-n1:<module>:1.0.0-beta.1` to Maven Central from
 a GitHub pre-release (`.github/workflows/publish.yml`); until a release is published, include the
 fork as a Gradle composite build (for example as a git submodule), which substitutes the same
 coordinates:
@@ -116,7 +116,7 @@ includeBuild("actron")
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.roman-n1:actron-statechart:5.0.0-alpha.1")
+            implementation("io.github.roman-n1:actron-statechart:1.0.0-beta.1")
         }
     }
     compilerOptions {
