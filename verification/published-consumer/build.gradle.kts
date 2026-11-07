@@ -18,7 +18,14 @@ val suffix = mapOf("jvm" to "jvm", "android" to "android", "js" to "js", "wasm" 
 tasks.register("verifyPublishedGraphs") {
     group = "verification"
     doLast {
-        val productionNames = setOf("actron-decompose", "actron-core", "actron-compose", "actron-message", "actron-logging", "actron-observability", "actron-statechart", "actron-statechart-compose", "actron-persistence")
+        val productionNames = mutableSetOf("actron-decompose", "actron-core", "actron-compose", "actron-message", "actron-logging", "actron-observability", "actron-statechart", "actron-statechart-compose", "actron-persistence")
+        productionNames += "actron-diagnostics"
+        if (target == "jvm" || target == "android") {
+            productionNames += "actron-diagnostics-sdk"
+        }
+        if (target == "android") {
+            productionNames += "actron-diagnostics-crashlytics"
+        }
         val allNames = productionNames + setOf("actron-test", "actron-statechart-test", "actron-timetravel", "actron-timetravel-test", "actron-timetravel-compose")
 
         fun modules(projectName: String): Set<String> {

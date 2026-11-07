@@ -124,6 +124,8 @@ Keep guards and targets synchronous. Use `after` for a deadline owned by the act
 On an external self-transition the Store exits the previous activation and starts a new entry.
 See the [request and threading contract](doc/guides/machine-mvi.md).
 
+For a first rollout in an existing app, see the [integration guide](doc/guides/integrating-actron.md).
+
 ## Component lifetime
 
 With Decompose, `actron-decompose` creates, retains and starts the Store in one call:

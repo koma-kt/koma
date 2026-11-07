@@ -1,6 +1,7 @@
 package consumer
 
 import actron.core.ExceptionHandler
+import actron.statechart.machine.AdmissionPolicy
 import actron.statechart.machine.CommandHandler
 import actron.statechart.machine.DefinitionId
 import actron.statechart.machine.DefinitionVersion
@@ -10,7 +11,14 @@ import actron.statechart.machine.screenMachine
 import kotlinx.coroutines.CoroutineScope
 
 fun configuredMachine(scope: CoroutineScope) =
-    MachineStore(machine, Counter(), CommandHandler { _, _ -> }, scope, coroutineContext = scope.coroutineContext) {
+    MachineStore(
+        machine,
+        Counter(),
+        CommandHandler { _, _ -> },
+        scope,
+        coroutineContext = scope.coroutineContext,
+        admission = AdmissionPolicy.Bounded(32),
+    ) {
         exceptionHandler(ExceptionHandler.Ignore)
     }
 

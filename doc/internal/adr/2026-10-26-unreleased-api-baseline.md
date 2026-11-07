@@ -19,5 +19,6 @@ replaying a recording with a different machine; this is not old-version support.
 
 Existing format identifiers remain unchanged because this change removes readers and aliases,
 without changing the current writer's representation. Current-format round trips, golden files,
-malformed-input rejection and the API dumps remain checked. A first release can establish a
-forward compatibility policy as a separate decision.
+malformed-input rejection and the API dumps remain checked. The
+[first Maven release policy](2026-11-07-published-compatibility.md) defines the compatibility
+boundary for published versions.

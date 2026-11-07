@@ -2,6 +2,11 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TARGET=${1:-jvm}
+CONSUMER_ROOT=${ACTRON_CONSUMER_PROJECT:-$ROOT}
+CONSUMER_WRAPPER="$CONSUMER_ROOT/gradlew"
+if [[ "$CONSUMER_ROOT" != "$ROOT" ]]; then
+  CONSUMER_WRAPPER=$(cd "$CONSUMER_ROOT" && pwd)/gradlew
+fi
 case "$TARGET" in
   jvm) PUBLICATIONS=(Jvm); TASKS=(:app:jvmTest :tooling:compileKotlinJvm) ;;
   android) PUBLICATIONS=(Android); TASKS=(:app:compileAndroidMain :tooling:compileAndroidMain) ;;
@@ -14,9 +19,21 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/actron-published-consumer.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 # Read the actual publishing coordinates and plugin versions, without duplicating release values.
 value() { python3 "$ROOT/verification/published-consumer/config.py" "$ROOT" "$1"; }
+consumer_value() {
+  if [[ "$CONSUMER_ROOT" == "$ROOT" ]]; then
+    value "$1"
+  else
+    python3 "$ROOT/verification/published-consumer/config.py" "$CONSUMER_ROOT" "$2"
+  fi
+}
 GROUP=$(value group)
 VERSION=$(value version)
 MODULES=(actron-decompose actron-core actron-compose actron-logging actron-message actron-test actron-statechart actron-observability actron-persistence actron-timetravel actron-statechart-test actron-timetravel-test actron-timetravel-compose actron-statechart-compose)
+MODULES+=(actron-diagnostics)
+case "$TARGET" in
+  jvm) MODULES+=(actron-diagnostics-sdk) ;;
+  android) MODULES+=(actron-diagnostics-sdk actron-diagnostics-crashlytics) ;;
+esac
 PUBLISH_TASKS=(:actron-bom:publishMavenPublicationToConsumerRepository)
 for module in "${MODULES[@]}"; do
   for publication in KotlinMultiplatform "${PUBLICATIONS[@]}"; do
@@ -26,8 +43,8 @@ done
 "$ROOT/gradlew" -p "$ROOT" "${PUBLISH_TASKS[@]}" -Pactron.consumer.repository="$WORK/maven" --no-configuration-cache --max-workers=2 --no-daemon
 python3 "$ROOT/verification/published-consumer/verify_metadata.py" "$WORK/maven" "$GROUP" "$VERSION" "$TARGET"
 PROPERTIES=(-Pconsumer.repository="$WORK/maven" -Pconsumer.group="$GROUP" -Pconsumer.version="$VERSION" -Pconsumer.target="$TARGET"
-  -Pconsumer.kotlin="$(value kotlin)" -Pconsumer.agp="$(value agp)" -Pconsumer.compose="$(value compose-multiplatform)" -Pconsumer.coroutines="$(value coroutines)"
-  -Pconsumer.compileSdk="$(value android-compileSdk)")
+  -Pconsumer.kotlin="$(consumer_value kotlin kotlin)" -Pconsumer.agp="$(consumer_value agp android-gradlePlugin)" -Pconsumer.compose="$(consumer_value compose-multiplatform composeMultiplatform)" -Pconsumer.coroutines="$(consumer_value coroutines kotlinxCoroutinesCore)"
+  -Pconsumer.compileSdk="$(consumer_value android-compileSdk android-compileSdk)")
 if [[ "$TARGET" == jvm ]]; then
   if [[ -n "${ACTRON_CONSUMER_JAVA11_HOME:-}" ]]; then
     PROPERTIES+=(-Pconsumer.java11.home="$ACTRON_CONSUMER_JAVA11_HOME")
@@ -47,11 +64,11 @@ awk '/^<!-- compiled-quick-start -->$/ { marker=1; next }
      END { if (!done || !code) exit 1 }' "$ROOT/README.md" > "$WORK/positive/ReadmeCounter.kt"
 cp "$ROOT/verification/published-consumer/contracts/PositiveContracts.kt" "$WORK/positive/"
 cp "$ROOT/verification/published-consumer/contracts/"*.kt "$WORK/negative/"
-"$ROOT/gradlew" -p "$ROOT/verification/published-consumer" "${PROPERTIES[@]}" -Pconsumer.contractSources="$WORK/positive" "${TASKS[@]}" verifyPublishedGraphs --no-configuration-cache --max-workers=2 --no-daemon
+"$CONSUMER_WRAPPER" -p "$ROOT/verification/published-consumer" "${PROPERTIES[@]}" -Pconsumer.contractSources="$WORK/positive" "${TASKS[@]}" verifyPublishedGraphs --no-configuration-cache --max-workers=2 --no-daemon
 if [[ "$TARGET" == jvm ]]; then
   REPORTS="$ROOT/verification/published-consumer/build/reports/contracts"
   mkdir -p "$REPORTS"
-  if "$ROOT/gradlew" -p "$ROOT/verification/published-consumer" "${PROPERTIES[@]}" -Pconsumer.contractSources="$WORK/negative" :app:compileKotlinJvm --no-configuration-cache --max-workers=2 --no-daemon > "$REPORTS/negative-compile.log" 2>&1; then
+  if "$CONSUMER_WRAPPER" -p "$ROOT/verification/published-consumer" "${PROPERTIES[@]}" -Pconsumer.contractSources="$WORK/negative" :app:compileKotlinJvm --no-configuration-cache --max-workers=2 --no-daemon > "$REPORTS/negative-compile.log" 2>&1; then
     printf 'Forbidden adapter DSL compiled successfully; contract verification failed\n' >&2
     exit 1
   fi

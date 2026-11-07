@@ -980,7 +980,7 @@ For bounded command/timer/bridge causality shared across Stores, use the optiona
 ## Durable workflow and migrations
 
 `DurableMachine(machine, storage, keyOf)` wraps the pure machine with an atomic snapshot/outbox
-transaction. Storage implements `DurableMachineStorage.load/commit`, with durable compare-and-swap
+transaction. Storage implements `DurableMachineStorage.read/commit`, with durable compare-and-swap
 by generation. `initialize`, `commit` and `executeNext` return only persisted intents. A durable
 handler receives a stable `IdempotencyKey` and persisted attempt count; it must use service-side
 idempotency or a transactional local receipt. Scope exit cancels ordinary work while durable
