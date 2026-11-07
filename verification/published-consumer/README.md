@@ -16,7 +16,7 @@ scripts/verify-published-consumer.sh wasm
 scripts/verify-published-consumer.sh ios # requires macOS/Xcode
 ```
 
-Each invocation publishes the **BOM and fourteen library modules**, including persistence, test and debug tooling,
+Each invocation publishes the **BOM and all library modules available for the selected target**, including diagnostics, persistence, test and debug tooling,
 with their root metadata and the selected platform's variants. Group/version are read from
 `gradle.properties`; plugin/dependency versions are read from the producer's version catalog.
 It creates and deletes a unique temporary Maven repository. It does not publish to Maven
@@ -35,7 +35,7 @@ and a logging plugin. CI builds with JDK 17 and executes the JVM smoke with a re
 target-11 bytecode calling newer Java APIs is detected. Locally set
 `ACTRON_CONSUMER_JAVA11_HOME=/path/to/jdk-11` to do the same; otherwise the local smoke uses the
 Gradle runtime and reports that limitation. `tooling` separately compiles MachineTestDriver, actron-test helpers and
-the Time Travel inspector. Graph checks require all fourteen modules to be consumed and reject
+the Time Travel inspector. Graph checks require all applicable modules to be consumed and reject
 source-project substitution, mixed fork versions, upstream Koma dependencies anywhere in the
 resolved graph, and test/debug modules in the app graph. Actron does not support source,
 binary or runtime interoperability with upstream Koma 4.0.0.
@@ -51,3 +51,19 @@ a negative fixture rejects MachineStore `state`/`initialState`/`recover`, the re
 and `StateChartStore` factories, and use of `createRuntimeStore` without internal opt-in.
 An unrelated compiler or dependency failure cannot satisfy the negative check; each operation
 must produce its own diagnostic. The captured compiler log remains under `build/reports/contracts`.
+
+## Host toolchain profile
+
+To check compatibility before wiring a real feature, run the standalone consumer with the
+messenger checkout's wrapper and version catalog. Set `ANDROID_HOME` to the installed SDK
+for the Android run because the isolated project has its own settings.
+
+```bash
+ACTRON_CONSUMER_PROJECT=../kmp_messenger_2 scripts/verify-published-consumer.sh android
+ACTRON_CONSUMER_PROJECT=../kmp_messenger_2 scripts/verify-published-consumer.sh ios
+```
+
+Actron is still published with its own build. Only the isolated consumer uses the host's
+Gradle, Kotlin, AGP, Compose, coroutines and compile SDK settings. This fixture does not
+copy the host's constraints or run its release APK/R8 and device-link tasks. Use the
+[integration guide](../../doc/guides/integrating-actron.md) for those acceptance checks.

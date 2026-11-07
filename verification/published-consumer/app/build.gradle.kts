@@ -9,8 +9,9 @@ plugins {
 if (providers.gradleProperty("consumer.target").get() == "android") {
     pluginManager.apply("com.android.kotlin.multiplatform.library")
 }
+val target = providers.gradleProperty("consumer.target").get()
 kotlin {
-    when (providers.gradleProperty("consumer.target").get()) {
+    when (target) {
         "jvm" -> {
             jvm { compilerOptions { jvmTarget = JvmTarget.JVM_11 } }
         }
@@ -51,6 +52,13 @@ kotlin {
             implementation(project.dependencies.platform("$coordinate:actron-bom:$version"))
             // core/statechart/observability are intentionally only transitive dependencies.
             listOf("actron-decompose", "actron-compose", "actron-message", "actron-logging", "actron-statechart-compose", "actron-persistence").forEach { implementation("$coordinate:$it") }
+            implementation("$coordinate:actron-diagnostics")
+            if (target == "jvm" || target == "android") {
+                implementation("$coordinate:actron-diagnostics-sdk")
+            }
+            if (target == "android") {
+                implementation("$coordinate:actron-diagnostics-crashlytics")
+            }
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
